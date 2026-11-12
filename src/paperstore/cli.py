@@ -76,6 +76,8 @@ def cmd_add(s, args):
         if problem and not args.force:
             dest.unlink()
             sys.exit(problem + "\nnot added; check the file, or pass --force if it is right")
+    if args.pdf:
+        pdf.thumbnail(dest, s.thumbs / f"{key}.jpg")
     s.entries = bib.insert(s.entries, e)
     s.save()
     s.save_records(recs)
@@ -141,6 +143,27 @@ def _check_files(s):
     return out
 
 
+def _check_thumbs(s, fix):
+    out = []
+    pdfs = {p.stem: p for p in s.root.glob("*.pdf")}
+    for key, p in sorted(pdfs.items()):
+        t = s.thumbs / f"{key}.jpg"
+        if not t.exists():
+            if fix:
+                pdf.thumbnail(p, t)
+                print(f"made thumbs/{key}.jpg")
+            else:
+                out.append(f"thumbs/{key}.jpg is missing (run: paperstore check --fix)")
+    if s.thumbs.exists():
+        for t in sorted(s.thumbs.glob("*.jpg")):
+            if t.stem not in pdfs:
+                if fix:
+                    t.unlink()
+                else:
+                    out.append(f"thumbs/{t.name}: no {t.stem}.pdf (run: paperstore check --fix)")
+    return out
+
+
 def _anchor(s, key, n):
     """The anchor a note's quote has now: (hit, problem)."""
     path = s.root / f"{key}.pdf"
@@ -192,7 +215,7 @@ def _check_notes(s, fix):
 
 
 def cmd_check(s, args):
-    problems = _check_bib(s) + _check_files(s) + _check_notes(s, args.fix)
+    problems = _check_bib(s) + _check_files(s) + _check_thumbs(s, args.fix) + _check_notes(s, args.fix)
     if args.live:
         recs = s.records()
         for e in s.entries:
@@ -380,7 +403,7 @@ def main(argv=None):
     a.add_argument("--refresh", action="store_true")
 
     a = sub.add_parser("check", help="check the store")
-    a.add_argument("--fix", action="store_true", help="re-anchor annotations whose boxes or context moved")
+    a.add_argument("--fix", action="store_true", help="re-anchor annotations whose boxes or context moved; make missing thumbnails")
     a.add_argument("--live", action="store_true", help="also refetch every record and compare")
 
     a = sub.add_parser("search", help="regex search over every paper's text")

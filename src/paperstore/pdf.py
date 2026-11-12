@@ -137,6 +137,15 @@ def figures(path, page):
         return out
 
 
+def thumbnail(path, out, width=240):
+    """The first page as a small JPEG, for the viewer's library."""
+    with pymupdf.open(path) as doc:
+        p = doc[0]
+        pix = p.get_pixmap(matrix=pymupdf.Matrix(width / p.rect.width, width / p.rect.width))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(pix.tobytes("jpeg", jpg_quality=70))
+
+
 def page_count(path):
     with pymupdf.open(path) as doc:
         return doc.page_count

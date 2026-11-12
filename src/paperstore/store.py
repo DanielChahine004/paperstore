@@ -4,6 +4,7 @@
     <Key>.pdf                 one PDF per entry, named by its key
     records.json              doi.org records for every DOI, the witness the checks use
     annotations/<Key>.json    highlights, notes and cited quotes for one paper
+    thumbs/<Key>.jpg          the first page, small, for the viewer's library
     paperstore.toml           optional: viewer URL and the GitHub repo
     .paperstore/              local cache (page text), never committed
 """
@@ -24,6 +25,7 @@ class Store:
         self.records_path = self.root / "records.json"
         self.notes_dir = self.root / "annotations"
         self.cache = self.root / ".paperstore"
+        self.thumbs = self.root / "thumbs"
         cfg = self.root / "paperstore.toml"
         self.config = tomllib.loads(cfg.read_text()) if cfg.exists() else {}
 
