@@ -434,7 +434,7 @@ async function layout() {
 	R.observer = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && renderPage(Number(e.target.dataset.n))), { rootMargin: "1200px 0px" });
 	R.pages = [];
 	const first = await R.doc.getPage(1);
-	const room = innerWidth - (small() ? 0 : (R.panel ? 380 : 0) + 48);
+	const room = document.documentElement.clientWidth - (small() ? 4 : (R.panel ? 380 : 0) + 48);   // clientWidth: no scrollbar
 	const base = first.getViewport({ scale: 1 }).width;
 	R.scale = small() ? room / base * Math.min(S.scale / 1.2, 3) : Math.min(S.scale, room / base);
 	for (let n = 1; n <= R.doc.numPages; n++) {
