@@ -27,7 +27,7 @@ class Store:
         self.cache = self.root / ".paperstore"
         self.thumbs = self.root / "thumbs"
         cfg = self.root / "paperstore.toml"
-        self.config = tomllib.loads(cfg.read_text()) if cfg.exists() else {}
+        self.config = tomllib.loads(cfg.read_text(encoding="utf-8")) if cfg.exists() else {}
 
     # -- bibliography
     def load(self):
@@ -49,10 +49,10 @@ class Store:
 
     # -- records
     def records(self):
-        return json.loads(self.records_path.read_text()) if self.records_path.exists() else {}
+        return json.loads(self.records_path.read_text(encoding="utf-8")) if self.records_path.exists() else {}
 
     def save_records(self, recs):
-        self.records_path.write_text(json.dumps(dict(sorted(recs.items())), indent=1, ensure_ascii=False) + "\n")
+        self.records_path.write_text(json.dumps(dict(sorted(recs.items())), indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
 
     # -- annotations
     def notes_path(self, key):

@@ -34,13 +34,13 @@ def pages_text(path, cache_dir):
     cache = cache_dir / "text" / (path.stem + ".json")
     digest = sha(path)
     if cache.exists():
-        data = json.loads(cache.read_text())
+        data = json.loads(cache.read_text(encoding="utf-8"))
         if data.get("sha") == digest:
             return data["pages"]
     with pymupdf.open(path) as doc:
         pages = [p.get_text() for p in doc]
     cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_text(json.dumps({"sha": digest, "pages": pages}))
+    cache.write_text(json.dumps({"sha": digest, "pages": pages}), encoding="utf-8")
     return pages
 
 
