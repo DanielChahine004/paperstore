@@ -315,12 +315,12 @@ function focusNote(id, scroll) {
 
 function drawSide() {
 	const p = R.paper, notes = (S.notes[R.key] || []).slice().sort((a, b) => a.page - b.page || (a.rects?.[0]?.[1] || 0) - (b.rects?.[0]?.[1] || 0));
-	$("#side").replaceChildren(
+	$("#side").replaceChildren(...[
 		el("h3", {}, p.title),
 		el("div", { class: "meta" }, `${p.authors.map((a) => a.split(",")[0]).join(", ")} · ${p.year} · ${p.venue} · `,
 			p.doi ? el("a", { href: `https://doi.org/${p.doi}`, target: "_blank", rel: "noopener" }, "DOI") : null, ` · ${p.key}`),
 		notes.length ? null : el("p", { class: "meta" }, "No annotations yet. Select text and press Annotate, or press Box to mark a figure or table."),
-		...notes.map((n) => noteCard(R.key, n, true)));
+		...notes.map((n) => noteCard(R.key, n, true))].filter(Boolean));
 }
 
 function noteCard(key, n, inReader) {
@@ -330,7 +330,7 @@ function noteCard(key, n, inReader) {
 		el("q", { onclick: () => (inReader ? focusNote(n.id, true) : (location.hash = `#/${key}/${n.id}`)) }, quote),
 		v ? el("div", { class: "val" }, v) : null,
 		n.note ? el("div", {}, n.note) : null,
-		el("div", { class: "by" }, inReader ? null : el("a", { href: `#/${key}/${n.id}` }, key), `p.${n.page}`, "·", n.creator || "",
+		el("div", { class: "by" }, inReader ? null : el("a", { href: `#/${key}/${n.id}` }, key), `p.${n.page} · ${n.creator || ""} ·`,
 			el("span", { class: "st-" + (n.status || "unchecked") }, n.status || "unchecked"),
 			...(n.tags || []).map((t) => el("span", { class: "tag" }, "#" + t))));
 	if (inReader && S.src) {
@@ -366,7 +366,10 @@ async function removeNote(key, id) {
 function selectionTarget() {
 	const sel = getSelection();
 	if (!sel || sel.isCollapsed || !R) return null;
-	const range = sel.getRangeAt(0);
+	const range = sel.getRangeAt(0).cloneRange();   // widened to whole words: "than", not "han"
+	const word = /[\p{L}\p{N}]/u;
+	if (range.startContainer.nodeType === 3) { const t = range.startContainer.data; let i = range.startOffset; while (i > 0 && word.test(t[i - 1])) i--; range.setStart(range.startContainer, i); }
+	if (range.endContainer.nodeType === 3) { const t = range.endContainer.data; let i = range.endOffset; while (i < t.length && word.test(t[i])) i++; range.setEnd(range.endContainer, i); }
 	const pageDiv = (range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement)?.closest(".page");
 	if (!pageDiv) return null;
 	const n = Number(pageDiv.dataset.n), box = pageDiv.getBoundingClientRect();
@@ -378,7 +381,7 @@ function selectionTarget() {
 		if (same) { same[0] = Math.min(same[0], f[0]); same[2] = Math.max(same[2], f[2]); same[1] = Math.min(same[1], f[1]); same[3] = Math.max(same[3], f[3]); }
 		else lines.push(f);
 	}
-	const text = sel.toString().replace(/\s+/g, " ").trim();
+	const text = range.toString().replace(/\s+/g, " ").trim();
 	if (!text || !lines.length) return null;
 	return { page: n, text, rects: lines.map((l) => l.map((x) => Math.round(Math.min(1, Math.max(0, x)) * 1e4) / 1e4)), at: range.getBoundingClientRect() };
 }
