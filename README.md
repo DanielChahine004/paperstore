@@ -47,20 +47,34 @@ ignored. A quote found more than once is refused until it is longer, or given
 ## The viewer
 
 [danielchahine004.github.io/paperstore](https://danielchahine004.github.io/paperstore/)
-([demo, no sign-in](https://danielchahine004.github.io/paperstore/?demo)).
-The site is `docs/`, served by GitHub Pages from the main branch. It reads the
-store straight from GitHub in your browser: the site itself holds
-no papers. Select text and press **Annotate**, or **Box** (key B) to mark a
-figure or table; mark notes verified or disputed; copy a link that opens the
-paper at that note (`#/Key/id`). Each save is a commit by the person who made it.
+([demo, no sign-in](https://danielchahine004.github.io/paperstore/?demo)) is
+`docs/`, served by GitHub Pages. It reads the store straight from GitHub in the
+browser, so the site holds no papers, and it works on a phone.
 
-Access is whoever can read the repository. Point `docs/config.js` at your
-store, then sign in either way:
+- **Library:** first-page previews (from `thumbs/`, made by `check --fix`),
+  search across titles, authors, keys and venues, filters by year and venue.
+- **Claims:** every annotation in the store, searchable and filtered by tag,
+  status or person; "Numbers only" turns them into a sortable table of the
+  values papers report.
+- **Reader:** select text and press **Claim**, or **Box** (key B) to mark a
+  figure or table; mark claims verified or disputed; find in the paper; copy a
+  link that opens the paper at a claim (`#/Key/id`). Each save is a commit by
+  the person who made it.
 
-- **Sign in with GitHub** needs a GitHub App and the small helper in `worker/`
-  on Cloudflare Workers (free); [worker/README.md](worker/README.md) has the steps.
-- **A token**: a fine-grained token limited to the store, with Contents read and
-  write, pasted once per browser.
+## Your own store
+
+Anyone can use the same viewer for their own papers:
+
+1. Make a private repository laid out as above (`paperstore add` builds it).
+2. Install the [paperstore GitHub App](https://github.com/apps/paperstore-daniel)
+   on that repository only.
+3. Open the viewer with `?repo=you/your-papers` once (it is remembered), or type
+   the repository on the sign-in page, and sign in with GitHub.
+
+Access is whoever can read the repository: add collaborators on GitHub. To run
+your own copy instead, fork this repository, point `docs/config.js` at your
+store, and set up sign-in with [worker/README.md](worker/README.md), or leave
+`auth` empty and paste a fine-grained token.
 
 ## Licence
 
