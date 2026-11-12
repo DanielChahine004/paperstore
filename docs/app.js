@@ -87,6 +87,9 @@ class GitHubSource {
 		const login = (await r.json()).login;
 		const repo = await this.req("");
 		if (!repo.ok) throw new Error(`${login} cannot open ${this.repo}${repo.status === 404 ? " (no access, or no such repository)" : ""}`);
+		const perms = (await repo.json()).permissions || {};
+		this.canEdit = !!perms.push;     // a Read collaborator gets the viewer without its editing controls
+		this.isAdmin = !!perms.admin;    // who may manage access, on GitHub's own page
 		return login;
 	}
 	raw(path) { return this.req(`contents/${encodeURI(path)}?ref=${this.branch}`, { headers: { Accept: "application/vnd.github.raw" } }); }
@@ -110,7 +113,7 @@ class GitHubSource {
 }
 
 class StaticSource {   // a read-only store served beside the viewer (the demo); edits last until reload
-	constructor(base) { this.base = base; this.mem = {}; this.writable = false; this.repo = "demo"; }
+	constructor(base) { this.base = base; this.mem = {}; this.writable = false; this.canEdit = true; this.repo = "demo"; }
 	async user() { return "demo"; }
 	async text(path) { if (path in this.mem) return this.mem[path]; const r = await fetch(this.base + path); return r.ok ? r.text() : null; }
 	async bytes(path) { const r = await fetch(this.base + path); if (!r.ok) throw new Error(path + " not found"); return r.arrayBuffer(); }
@@ -188,7 +191,9 @@ function bar(kind, extra = []) {
 		kind === "reader" ? null : tab("#/claims", "Claims", kind === "claims"),
 		...extra,
 		kind === "reader" ? null : el("span", { class: "grow" }),
-		el("span", { class: "who hide-sm", title: S.src?.repo }, S.src?.writable ? S.me : "demo · read-only")].filter(Boolean));
+		kind !== "reader" && S.src?.isAdmin ? el("a", { class: "btn hide-sm", href: `https://github.com/${S.src.repo}/settings/access`, target: "_blank", rel: "noopener",
+			title: "Invite people and set who can read or edit, on GitHub" }, icon("out"), "Share") : null,
+		el("span", { class: "who hide-sm", title: S.src?.repo }, !S.src?.writable ? "demo · edits not saved" : S.src.canEdit ? S.me : `${S.me} · read-only`)].filter(Boolean));
 }
 
 // ---- sign-in view -------------------------------------------------------------------------
@@ -340,7 +345,10 @@ function claimCard(key, n, opt = {}) {
 		n.value ? el("div", { class: "value" }, n.value.what ? `${n.value.what} ` : "", el("span", { class: "num" }, `${n.value.number}${n.value.unit ? " " + n.value.unit : ""}`)) : null,
 		n.note ? el("div", { class: "note" }, n.note) : null,
 		n.tags?.length ? el("div", { class: "tags" }, ...n.tags.map((t) => el("span", { class: "tag" }, t))) : null);
-	if (!opt.paper) {   // in the reader: status, edit, link, delete
+	if (!opt.paper && !S.src.canEdit) {   // read-only: the link alone
+		card.append(el("div", { class: "acts" }, el("span", { class: "grow", style: "flex:1" }),
+			btn("link", "Copy a link to this claim", async () => { try { await navigator.clipboard.writeText(claimLink(key, n.id)); toast("Link copied"); } catch { prompt("Link to this claim", claimLink(key, n.id)); } })));
+	} else if (!opt.paper) {   // in the reader: status, edit, link, delete
 		const seg = el("div", { class: "seg", role: "group", "aria-label": "Status" }, ...["unchecked", "verified", "disputed"].map((s) =>
 			el("button", { class: s === st ? "on" : "", onclick: () => s !== st && edit(key, n.id, { status: s }, `mark ${s}`) }, s === "unchecked" ? "Unchecked" : s === "verified" ? "Verified" : "Disputed")));
 		card.append(el("div", { class: "acts" }, seg,
@@ -410,7 +418,7 @@ function readerBar() {
 		findbox,
 		small() ? btn("search", "Find in paper", () => { findbox.hidden = !findbox.hidden; if (!findbox.hidden) find.focus(); }) : null,
 		btn("minus", "Zoom out", () => zoom(1 / 1.15), { cls: "hide-sm" }), btn("plus", "Zoom in", () => zoom(1.15), { cls: "hide-sm" }),
-		R.boxBtn = btn("box", "Box a figure or table (B)", () => setBoxing(!S.boxing), { label: small() ? null : "Box" }),
+		R.boxBtn = S.src.canEdit ? btn("box", "Box a figure or table (B)", () => setBoxing(!S.boxing), { label: small() ? null : "Box" }) : null,
 		R.panelBtn = btn("panel", "Claims and details", () => togglePanel(), { cls: R.panel ? "on" : "" }),
 	]);
 }
@@ -522,7 +530,7 @@ function drawPanel() {
 				...row("Length", R.doc ? `${R.doc.numPages} pages` : null)));
 	} else {
 		body = el("div", {}, notes.length ? notes.map((n) => { const c = claimCard(R.key, n); if (n.id === R.sel) c.classList.add("sel"); return c; })
-			: el("p", { class: "empty" }, "No claims on this paper yet.", el("br"), "Select a sentence and press ", el("b", {}, "Claim"), ", or press ", el("b", {}, "Box"), " to mark a figure or table."));
+			: el("p", { class: "empty" }, "No claims on this paper yet.", S.src.canEdit ? [el("br"), "Select a sentence and press ", el("b", {}, "Claim"), ", or press ", el("b", {}, "Box"), " to mark a figure or table."] : null));
 	}
 	const grip = el("div", { class: "grip", onclick: () => $("#panel").classList.toggle("tall") });
 	$("#panel").replaceChildren(grip, el("div", { class: "ptabs" }, tab("claims", `Claims${notes.length ? " · " + notes.length : ""}`), tab("details", "Details"), el("span", { class: "grow" }),
@@ -596,7 +604,7 @@ function placePop() {
 	const t = selectionTarget(), pop = $("#pop");
 	if (!t) { pop.hidden = true; return; }
 	pop.replaceChildren(
-		el("button", { class: "btn", onpointerdown: (e) => e.preventDefault(), onclick: () => { const t2 = selectionTarget(); if (t2) compose(t2); } }, icon("quote"), "Claim"),
+		S.src.canEdit ? el("button", { class: "btn", onpointerdown: (e) => e.preventDefault(), onclick: () => { const t2 = selectionTarget(); if (t2) compose(t2); } }, icon("quote"), "Claim") : "",
 		el("button", { class: "btn", onpointerdown: (e) => e.preventDefault(), onclick: async () => { try { await navigator.clipboard.writeText(t.text); toast("Copied"); } catch {} pop.hidden = true; } }, icon("copy"), "Copy"));
 	pop.hidden = false;
 	const w = pop.offsetWidth, below = t.at.bottom + 10, above = t.at.top - pop.offsetHeight - 10;
@@ -707,7 +715,7 @@ addEventListener("hashchange", route);
 document.addEventListener("selectionchange", () => { clearTimeout(placePop.t); placePop.t = setTimeout(placePop, 180); });
 addEventListener("keydown", (e) => {
 	if (e.target.closest?.("input, textarea, select, dialog") || !R) return;
-	if (e.key === "b" || e.key === "B") setBoxing(!S.boxing);
+	if ((e.key === "b" || e.key === "B") && S.src.canEdit) setBoxing(!S.boxing);
 	if (e.key === "Escape") { setBoxing(false); $("#pop").hidden = true; }
 	if ((e.ctrlKey || e.metaKey) && e.key === "f" && R.find) { e.preventDefault(); R.find.input.closest(".findbox").hidden = false; R.find.input.focus(); }
 });
