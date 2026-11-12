@@ -4,4 +4,4 @@ compatibility_date = "2026-01-01"
 
 [vars]
 VIEWER = "https://danielchahine004.github.io/paperstore/"
-CLIENT_ID = ""   # the GitHub App's client ID; the secret goes in with: npx wrangler secret put CLIENT_SECRET
+CLIENT_ID = "Iv23liSjx8cHowgNuN84"   # the GitHub App's client ID; the secret goes in with: npx wrangler secret put CLIENT_SECRET
