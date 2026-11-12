@@ -73,8 +73,10 @@ Anyone can use the same viewer for their own papers:
 
 Access is whoever can read the repository: add collaborators on GitHub. To run
 your own copy instead, fork this repository, point `docs/config.js` at your
-store, and set up sign-in with [worker/README.md](worker/README.md), or leave
-`auth` empty and paste a fine-grained token.
+store, and either ask to have your copy's address approved for this sign-in
+(it is one setting; see [worker/README.md](worker/README.md)), set up your own,
+or leave `auth` empty and paste a fine-grained token. Features useful to
+everyone are welcome back as pull requests.
 
 ## Licence
 

@@ -21,6 +21,12 @@ Workers' free plan, and stores nothing.
 
 3. **Viewer.** Put the worker's URL in `docs/config.js` as `auth`.
 
+**Other viewers.** A lab running its own copy of the viewer can use this sign-in
+too: add its address to the worker's `VIEWERS` variable (Cloudflare → the worker
+→ Settings → Variables), space separated, e.g.
+`https://smithlab.github.io/paperstore/`. Only listed addresses ever receive a
+token, so a site pretending to be a viewer gets nothing.
+
 To share the store, add people as collaborators on the repository; they sign in
 with their own accounts. The app only reaches repositories it is installed on,
 and only those the signed-in person could already read.

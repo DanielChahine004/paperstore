@@ -7,6 +7,8 @@
 //   CLIENT_ID      the GitHub App's client ID
 //   CLIENT_SECRET  its client secret (a secret)
 //   VIEWER         the viewer's URL; tokens are only ever sent there
+//   VIEWERS        optional: more viewer URLs, space or comma separated (labs' own
+//                  copies), each approved by whoever runs this worker
 //
 //   GET  /login?then=/Key&back=<viewer url>   -> GitHub's sign-in page
 //   GET  /callback?code=...&state=...          -> back to the viewer with #token=...
@@ -15,13 +17,18 @@
 export default {
 	async fetch(req, env) {
 		const url = new URL(req.url);
-		const viewer = env.VIEWER.replace(/\/?$/, "/");
-		const cors = { "Access-Control-Allow-Origin": new URL(viewer).origin, "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+		// every viewer allowed to receive a token; the first is the default
+		const viewers = [env.VIEWER, ...(env.VIEWERS || "").split(/[\s,]+/)].filter(Boolean).map((v) => v.replace(/\/?$/, "/"));
+		const viewer = viewers[0];
+		const allowed = (u) => typeof u === "string" && viewers.some((v) => u.startsWith(v));
+		const origin = req.headers.get("Origin");
+		const cors = { "Access-Control-Allow-Origin": viewers.some((v) => new URL(v).origin === origin) ? origin : new URL(viewer).origin,
+			"Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "POST, OPTIONS", Vary: "Origin" };
 
 		if (url.pathname === "/login") {
-			// the viewer may pass ?back= with its query (?repo=...), but only under VIEWER
+			// the viewer passes ?back= (its own address, with any ?repo=); only an approved viewer gets the token
 			const back = url.searchParams.get("back") || viewer;
-			const state = JSON.stringify({ then: url.searchParams.get("then") || "/", back: back.startsWith(viewer) ? back : viewer });
+			const state = JSON.stringify({ then: url.searchParams.get("then") || "/", back: allowed(back) ? back : viewer });
 			const gh = new URL("https://github.com/login/oauth/authorize");
 			gh.searchParams.set("client_id", env.CLIENT_ID);
 			gh.searchParams.set("redirect_uri", url.origin + "/callback");
@@ -32,7 +39,7 @@ export default {
 		if (url.pathname === "/callback") {
 			let state;
 			try { state = JSON.parse(atob(url.searchParams.get("state") || "")); } catch { return new Response("bad state", { status: 400 }); }
-			const back = typeof state.back === "string" && state.back.startsWith(viewer) ? state.back : viewer;
+			const back = allowed(state.back) ? state.back : viewer;
 			const tok = await exchange(env, { code: url.searchParams.get("code") });
 			if (!tok.access_token) return new Response("GitHub refused the sign-in: " + (tok.error_description || tok.error || "unknown"), { status: 400 });
 			const frag = new URLSearchParams({ token: tok.access_token, refresh: tok.refresh_token || "", expires_in: String(tok.expires_in || 0), then: state.then || "/" });
