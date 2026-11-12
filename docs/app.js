@@ -76,7 +76,7 @@ const auth = {
 class GitHubSource {
 	constructor(repo, branch) { this.repo = repo; this.branch = branch || "main"; this.writable = true; }
 	async req(path, opts = {}) {
-		const r = await fetch(`https://api.github.com/repos/${this.repo}/${path}`, {
+		const r = await fetch(`https://api.github.com/repos/${this.repo}${path ? "/" + path : ""}`, {   // no trailing slash: GitHub 404s it
 			...opts, headers: { Authorization: `Bearer ${await auth.fresh()}`, "X-GitHub-Api-Version": "2022-11-28", ...(opts.headers || {}) } });
 		if (r.status === 401) { auth.clear(); throw new Error("signed out: sign in again"); }
 		return r;
