@@ -1,5 +1,7 @@
 # paperstore
 
+**▶ [Open the viewer](https://danielchahine004.github.io/paperstore/)** · [demo, no sign-in](https://danielchahine004.github.io/paperstore/?demo) · [use it for your own papers](#your-own-store)
+
 Your papers as a git repository: the PDFs, the bibliography, and notes anchored
 to the exact words or box on the page they came from. A command-line tool
 checks every entry against its DOI and every quote against its PDF, and a web
