@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper Store</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/web/pdf_viewer.css">
+<link rel="stylesheet" href="style.css">
+<script src="config.js"></script>
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<header id="bar">
+	<a id="home" href="#/">Papers</a>
+	<a id="allnotes" href="#/notes">Notes</a>
+	<span id="crumb"></span>
+	<span id="spacer"></span>
+	<span id="tools" hidden>
+		<button id="zoomout" title="Zoom out">−</button>
+		<button id="zoomin" title="Zoom in">+</button>
+		<button id="boxmode" title="Draw a box on a figure or table (B)">Box</button>
+		<button id="sidetoggle" title="Annotations">Notes</button>
+	</span>
+	<span id="who"></span>
+</header>
+<main id="main"></main>
+<aside id="side" hidden></aside>
+<button id="annotate" hidden>Annotate</button>
+<dialog id="form">
+	<form method="dialog">
+		<blockquote id="f-quote"></blockquote>
+		<label>Note <textarea id="f-note" rows="4" placeholder="What this says, why it matters, what to check"></textarea></label>
+		<label>Tags <input id="f-tags" placeholder="space separated, e.g. timing leaderboard"></label>
+		<details><summary>Number this reports</summary>
+			<div class="row">
+				<label>Value <input id="f-value" inputmode="decimal"></label>
+				<label>Unit <input id="f-unit" placeholder="ps"></label>
+				<label>Quantity <input id="f-what" placeholder="CTR"></label>
+			</div>
+		</details>
+		<menu><button value="cancel" formnovalidate>Cancel</button><button value="save" id="f-save">Save</button></menu>
+	</form>
+</dialog>
+<div id="toast" hidden></div>
+</body>
+</html>

@@ -1,0 +1,124 @@
+{
+ "paper": "AbiAkl2023",
+ "annotations": [
+  {
+   "id": "25e2c6",
+   "created": "2026-11-12T05:41:26Z",
+   "creator": "claude",
+   "kind": "quote",
+   "page": 1,
+   "quote": {
+    "exact": "The sensitivity of design A was calculated to be 29.2 kcps/MBq at the centre",
+    "prefix": "were performed based on NEMA NU-2018 standards. Results: ",
+    "suffix": "and 27 kcps/MBq at 10 cm radial offset;"
+   },
+   "rects": [
+    [
+     0.3746,
+     0.5481,
+     0.8798,
+     0.5624
+    ]
+   ],
+   "note": "Design A: 7 rings of 50 x 50 x 16 mm monolithic LYSO, 36.2 cm axial FOV, 70 cm bore (p.4). Simulated in GATE 9.1 with a 200 ps CTR, NEMA NU-2018 line source at the centre.",
+   "tags": [
+    "sensitivity"
+   ],
+   "status": "verified",
+   "value": {
+    "number": 29.2,
+    "unit": "kcps/MBq",
+    "what": "sensitivity"
+   },
+   "modified": "2026-11-12T05:41:51Z"
+  },
+  {
+   "id": "4dd4a4",
+   "created": "2026-11-12T05:41:27Z",
+   "creator": "claude",
+   "kind": "quote",
+   "page": 1,
+   "quote": {
+    "exact": "the sensitivity of design B was found to be 106.8 kcps/MBq",
+    "prefix": "27 kcps/MBq at 10 cm radial offset; similarly,",
+    "suffix": "and 98.3 kcps/MBq at 10 cm radial offset."
+   },
+   "rects": [
+    [
+     0.637,
+     0.5633,
+     0.8802,
+     0.5776
+    ],
+    [
+     0.3109,
+     0.5784,
+     0.456,
+     0.5928
+    ]
+   ],
+   "note": "Design B: 14 rings, 72.6 cm axial FOV (p.4); about 3.7 times design A's sensitivity.",
+   "tags": [
+    "sensitivity"
+   ],
+   "status": "unchecked",
+   "value": {
+    "number": 106.8,
+    "unit": "kcps/MBq",
+    "what": "sensitivity"
+   },
+   "modified": "2026-11-12T05:41:52Z"
+  },
+  {
+   "id": "c34c81",
+   "created": "2026-11-12T05:41:53Z",
+   "creator": "claude",
+   "kind": "area",
+   "page": 4,
+   "rects": [
+    [
+     0.2619,
+     0.112,
+     0.7381,
+     0.3011
+    ]
+   ],
+   "note": "GATE renderings of the two ring designs, 36.2 and 72.6 cm axial FOV.",
+   "tags": [
+    "geometry"
+   ],
+   "status": "unchecked",
+   "label": "Fig. 1: designs A and B"
+  },
+  {
+   "id": "722c5a",
+   "created": "2026-11-12T05:41:55Z",
+   "creator": "claude",
+   "kind": "quote",
+   "page": 4,
+   "quote": {
+    "exact": "The scanners were modelled with a 200 ps CTR",
+    "prefix": "while design B has 14 rings (Fig. 1b).",
+    "suffix": "3 ns coincidence window, and an 11.5% energy"
+   },
+   "rects": [
+    [
+     0.4617,
+     0.5331,
+     0.8024,
+     0.5515
+    ]
+   ],
+   "note": "Assumed, not measured: every TOF result in this paper rests on it.",
+   "tags": [
+    "assumption"
+   ],
+   "status": "unchecked",
+   "value": {
+    "number": 200.0,
+    "unit": "ps",
+    "what": "CTR"
+   }
+  }
+ ]
+}

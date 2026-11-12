@@ -1,0 +1,98 @@
+{
+ "10.1186/s40658-023-00559-2": {
+  "type": "journal-article",
+  "title": "Monte Carlo simulation of the system performance of a long axial field-of-view PET based on monolithic LYSO detectors",
+  "container-title": "EJNMMI Physics",
+  "volume": "10",
+  "issue": "1",
+  "article-number": "37",
+  "issued": {
+   "date-parts": [
+    [
+     2023,
+     6,
+     13
+    ]
+   ]
+  },
+  "published-online": {
+   "date-parts": [
+    [
+     2023,
+     6,
+     13
+    ]
+   ]
+  },
+  "author": [
+   {
+    "ORCID": "https://orcid.org/0000-0002-0322-8225",
+    "authenticated-orcid": false,
+    "given": "Maya",
+    "family": "Abi-Akl",
+    "sequence": "first",
+    "affiliation": [],
+    "role": [
+     {
+      "role": "author",
+      "vocabulary": "crossref"
+     }
+    ]
+   },
+   {
+    "given": "Meysam",
+    "family": "Dadgar",
+    "sequence": "additional",
+    "affiliation": [],
+    "role": [
+     {
+      "role": "author",
+      "vocabulary": "crossref"
+     }
+    ]
+   },
+   {
+    "given": "Yassine",
+    "family": "Toufique",
+    "sequence": "additional",
+    "affiliation": [],
+    "role": [
+     {
+      "role": "author",
+      "vocabulary": "crossref"
+     }
+    ]
+   },
+   {
+    "given": "Othmane",
+    "family": "Bouhali",
+    "sequence": "additional",
+    "affiliation": [],
+    "role": [
+     {
+      "role": "author",
+      "vocabulary": "crossref"
+     }
+    ]
+   },
+   {
+    "given": "Stefaan",
+    "family": "Vandenberghe",
+    "sequence": "additional",
+    "affiliation": [],
+    "role": [
+     {
+      "role": "author",
+      "vocabulary": "crossref"
+     }
+    ]
+   }
+  ],
+  "publisher": "Springer Science and Business Media LLC",
+  "ISSN": [
+   "2197-7364"
+  ],
+  "DOI": "10.1186/s40658-023-00559-2",
+  "URL": "http://dx.doi.org/10.1186/s40658-023-00559-2"
+ }
+}
