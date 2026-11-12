@@ -182,13 +182,13 @@ const thumbObserver = new IntersectionObserver((es) => es.forEach(async (e) => {
 
 function bar(kind, extra = []) {
 	const tab = (href, label, on) => el("a", { class: "tab" + (on ? " on" : ""), href }, label);
-	$("#bar").replaceChildren(
+	$("#bar").replaceChildren(...[
 		kind === "reader" ? btn("back", "Back to the library", () => (location.hash = S.back || "#/")) : el("a", { class: "brand", href: "#/" }, icon("book"), el("span", { class: "hide-sm" }, "Paper Store")),
 		kind === "reader" ? null : tab("#/", "Library", kind === "library"),
 		kind === "reader" ? null : tab("#/claims", "Claims", kind === "claims"),
 		...extra,
 		kind === "reader" ? null : el("span", { class: "grow" }),
-		el("span", { class: "who hide-sm", title: S.src?.repo }, S.src?.writable ? S.me : "demo · read-only"));
+		el("span", { class: "who hide-sm", title: S.src?.repo }, S.src?.writable ? S.me : "demo · read-only")].filter(Boolean));
 }
 
 // ---- sign-in view -------------------------------------------------------------------------
