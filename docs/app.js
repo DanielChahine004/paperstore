@@ -35,11 +35,38 @@ const PATHS = {
 	grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z", list: "M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01",
 	up: "M18 15l-6-6-6 6", down: "M6 9l6 6 6-6", close: "M6 6l12 12M18 6L6 18", copy: "M9 9h11v11H9zM5 15H4V4h11v1", out: "M14 4h6v6M20 4l-9 9M18 14v6H4V6h6",
 	book: "M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM8 7h8",
+	moon: "M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z", sun: "M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4",
+	auto: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 3v18", pages: "M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M9 16h7",
 };
 const icon = (name) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("class", "icon"); s.innerHTML = `<path d="${PATHS[name]}"/>`; return s; };
 const btn = (name, title, onclick, extra = {}) => el("button", { class: "btn" + (extra.cls ? " " + extra.cls : ""), title, "aria-label": title, onclick, ...extra.attrs }, icon(name), extra.label || null);
 const toast = (msg, ms = 2400) => { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), ms); };
 const small = () => matchMedia("(max-width: 760px)").matches;
+
+// ---- theme: auto (the system's), dark, dark with pages in their own colours, light -----------
+
+const THEMES = { auto: "Theme: follows the system", dark: "Theme: dark, pages dimmed", "dark-pages": "Theme: dark, pages in their own colours", light: "Theme: light" };
+const theme = {
+	get mode() { const m = store.get("ps.theme", "auto"); return m in THEMES ? m : "auto"; },
+	apply() {   // index.html sets the same attributes before the page draws, so it never flashes white
+		const m = this.mode, root = document.documentElement;
+		if (m === "auto") delete root.dataset.theme; else root.dataset.theme = m === "light" ? "light" : "dark";
+		if (m === "dark-pages") root.dataset.pages = "original"; else delete root.dataset.pages;
+		const meta = $("meta[name=theme-color]");
+		if (meta) meta.content = getComputedStyle(root).getPropertyValue("--bg").trim() || "#fbfaf7";
+	},
+	next() {
+		const order = Object.keys(THEMES), m = order[(order.indexOf(this.mode) + 1) % order.length];
+		if (m === "auto") store.del("ps.theme"); else store.set("ps.theme", m);
+		this.apply();
+		toast(THEMES[m]);
+		$$(".themebtn").forEach((b) => b.replaceWith(themeBtn()));
+	},
+};
+const themeIcon = { auto: "auto", dark: "moon", "dark-pages": "pages", light: "sun" };
+const themeBtn = () => btn(themeIcon[theme.mode], THEMES[theme.mode] + " (tap to change)", () => theme.next(), { cls: "themebtn" });
+theme.apply();
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => theme.apply());
 
 // ---- sign-in ------------------------------------------------------------------------------
 
@@ -203,13 +230,14 @@ function bar(kind, extra = []) {
 		kind === "reader" ? null : el("span", { class: "grow" }),
 		kind !== "reader" && S.src?.isAdmin ? el("a", { class: "btn hide-sm", href: `https://github.com/${S.src.repo}/settings/access`, target: "_blank", rel: "noopener",
 			title: "Invite people and set who can read or edit, on GitHub" }, icon("out"), "Share") : null,
+		themeBtn(),
 		el("span", { class: "who hide-sm", title: S.src?.repo }, !S.src?.writable ? "demo · edits not saved" : S.src.canEdit ? S.me : `${S.me} · read-only`)].filter(Boolean));
 }
 
 // ---- sign-in view -------------------------------------------------------------------------
 
 function signinView(err) {
-	$("#bar").replaceChildren(el("span", { class: "brand" }, icon("book"), "Paper Store"));
+	$("#bar").replaceChildren(el("span", { class: "brand" }, icon("book"), "Paper Store"), el("span", { style: "flex:1" }), themeBtn());
 	$("#panel").hidden = true;
 	const repo = el("input", { value: store.get("ps.repo") || CFG.repo, placeholder: "owner/repository", spellcheck: "false" });
 	const remember = () => { const v = repo.value.trim(); if (v && v !== CFG.repo) store.set("ps.repo", v); else store.del("ps.repo"); };

@@ -5,11 +5,24 @@
 	--hl: rgba(255, 200, 40, .38); --ok: #1d8a52; --ok-soft: rgba(30, 160, 90, .28); --bad: #c53b32; --bad-soft: rgba(220, 60, 50, .28);
 	--area: rgba(53, 84, 209, .14); --radius: 10px; --shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
 	--bar: 52px; --panel: 380px;
+	--page-bg: #ffffff; --page-filter: none; --thumb-filter: none; --hl-blend: multiply; --quote-bar: #e6b400;
+	color-scheme: light;
 }
+/* dark: follows the system unless the theme button chose light or dark (html[data-theme]) */
 @media (prefers-color-scheme: dark) {
-	:root { --bg: #161615; --surface: #1f1f1d; --sunk: #2a2a27; --ink: #ecebe6; --muted: #a3a29b; --faint: #6d6c66;
-		--line: #34342f; --accent: #8aa2ff; --accent-ink: #10131f; --accent-soft: #252c48; --shadow: 0 1px 2px rgba(0,0,0,.4); }
+	:root:not([data-theme="light"]) { --bg: #161615; --surface: #1f1f1d; --sunk: #2a2a27; --ink: #ecebe6; --muted: #a3a29b; --faint: #6d6c66;
+	--line: #34342f; --accent: #8aa2ff; --accent-ink: #10131f; --accent-soft: #252c48; --shadow: 0 1px 2px rgba(0,0,0,.4);
+	--hl: rgba(255, 200, 40, .30); --ok-soft: rgba(60, 200, 120, .30); --bad-soft: rgba(240, 90, 80, .32); --area: rgba(138, 162, 255, .16);
+	--page-bg: #1b1b1a; --page-filter: invert(.89) hue-rotate(180deg) brightness(1.02) contrast(.92); --thumb-filter: invert(.89) hue-rotate(180deg) brightness(1.02) contrast(.92);
+	--hl-blend: normal; --quote-bar: #c9a227; color-scheme: dark; }
 }
+:root[data-theme="dark"] { --bg: #161615; --surface: #1f1f1d; --sunk: #2a2a27; --ink: #ecebe6; --muted: #a3a29b; --faint: #6d6c66;
+	--line: #34342f; --accent: #8aa2ff; --accent-ink: #10131f; --accent-soft: #252c48; --shadow: 0 1px 2px rgba(0,0,0,.4);
+	--hl: rgba(255, 200, 40, .30); --ok-soft: rgba(60, 200, 120, .30); --bad-soft: rgba(240, 90, 80, .32); --area: rgba(138, 162, 255, .16);
+	--page-bg: #1b1b1a; --page-filter: invert(.89) hue-rotate(180deg) brightness(1.02) contrast(.92); --thumb-filter: invert(.89) hue-rotate(180deg) brightness(1.02) contrast(.92);
+	--hl-blend: normal; --quote-bar: #c9a227; color-scheme: dark; }
+/* dark interface, pages in their own colours (figures, photos) */
+:root[data-pages="original"] { --page-bg: #ffffff; --page-filter: none; --thumb-filter: brightness(.8); --hl-blend: multiply; }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; font: 15px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }
@@ -57,7 +70,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .card { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; color: inherit; transition: border-color .15s, box-shadow .15s; }
 .card:hover { border-color: var(--accent); box-shadow: var(--shadow); }
 .thumb { aspect-ratio: 210 / 280; background: var(--sunk); overflow: hidden; position: relative; border-bottom: 1px solid var(--line); }
-.thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; filter: var(--thumb-filter); }
 .thumb .nopdf { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 13px; text-align: center; padding: 8px; }
 .card .body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
 .card .t { font-weight: 600; font-size: 14px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -76,6 +89,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .claims-table tbody tr { cursor: pointer; }
 .claims-table tbody tr:hover { background: var(--sunk); }
 .claims-table .q { color: var(--muted); font-style: italic; min-width: 220px; }
+.claims-table .q::before { content: "\201C"; } .claims-table .q::after { content: "\201D"; }
 .num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
 
@@ -85,13 +99,15 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .claim.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); cursor: default; }
 .claim .head { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .claim .head .grow { flex: 1; }
-.claim blockquote { margin: 0; font-family: "Source Serif 4", Charter, Georgia, serif; font-size: 15px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; border-left: 3px solid #e6b400; padding-left: 8px; }
+.claim blockquote { margin: 0; font-family: "Source Serif 4", Charter, Georgia, serif; font-size: 15px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; border-left: 3px solid var(--quote-bar); padding-left: 8px; font-style: italic; }
+.claim:not(.area) blockquote::before { content: "\201C"; } .claim:not(.area) blockquote::after { content: "\201D"; }
 .claim.verified blockquote { border-left-color: var(--ok); }
 .claim.disputed blockquote { border-left-color: var(--bad); }
-.claim.area blockquote { border-left-color: var(--accent); font-family: inherit; color: var(--muted); }
+.claim.area blockquote { border-left-color: var(--accent); font-family: inherit; font-style: normal; color: var(--muted); }
 .claim.sel blockquote { -webkit-line-clamp: unset; }
 .claim .value { margin-top: 6px; font-size: 14px; }
-.claim .note { margin-top: 6px; font-size: 14px; white-space: pre-wrap; }
+.claim .note { margin-top: 8px; font-size: 14px; white-space: pre-wrap; }
+.claim .note::before { content: "Note"; display: block; font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); margin-bottom: 1px; }
 .claim .tags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
 .tag { font-size: 12px; color: var(--muted); background: var(--sunk); border-radius: 6px; padding: 1px 7px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #d9a400; flex: none; }
@@ -107,12 +123,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 /* reader */
 #pages { overflow-x: hidden; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 20px 12px 80px; }
 body.paneled #pages { margin-right: var(--panel); }
-.page { position: relative; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 6px 24px rgba(0,0,0,.06); border-radius: 2px; }
-.page canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.page { position: relative; background: var(--page-bg); box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 6px 24px rgba(0,0,0,.06); border-radius: 2px; }
+.page canvas { position: absolute; inset: 0; width: 100%; height: 100%; filter: var(--page-filter); }
 .page .textLayer { z-index: 2; }
 .page .textLayer .findhit { background: rgba(53, 84, 209, .35); border-radius: 2px; }
 .page .textLayer .findhit.cur { background: rgba(53, 84, 209, .65); }
-.hl { position: absolute; z-index: 3; background: var(--hl); mix-blend-mode: multiply; border-radius: 2px; cursor: pointer; }
+.hl { position: absolute; z-index: 3; background: var(--hl); mix-blend-mode: var(--hl-blend); border-radius: 2px; cursor: pointer; }
 .hl.verified { background: var(--ok-soft); } .hl.disputed { background: var(--bad-soft); }
 .hl.area { background: var(--area); outline: 2px solid var(--accent); mix-blend-mode: normal; }
 .hl.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -144,7 +160,7 @@ dialog#composer { border: 0; border-radius: 14px; padding: 0; width: min(520px, 
 dialog#composer::backdrop { background: rgba(0,0,0,.25); }
 .compose { padding: 16px; display: grid; gap: 10px; }
 .compose h3 { margin: 0; font-size: 15px; }
-.compose blockquote { margin: 0; padding: 6px 10px; border-left: 3px solid #e6b400; font-family: "Source Serif 4", Charter, Georgia, serif; max-height: 26vh; overflow: auto; }
+.compose blockquote { margin: 0; padding: 6px 10px; border-left: 3px solid var(--quote-bar); font-style: italic; font-family: "Source Serif 4", Charter, Georgia, serif; max-height: 26vh; overflow: auto; }
 .compose .row { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 6px; }
 .compose label { font-size: 12.5px; color: var(--muted); display: grid; gap: 4px; }
 .compose details summary { font-size: 13px; color: var(--muted); cursor: pointer; }

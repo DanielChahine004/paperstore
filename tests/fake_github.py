@@ -32,6 +32,9 @@ class FakeGitHub:
         self.store = Path(store)
         self.commits = []   # (path, message) of each accepted PUT
         self.polls = 0      # device-flow polls; the second one is approved
+        self.push = True    # False: a read-only collaborator
+        self.conflicts = 0  # this many PUTs answer 409, as if someone else saved first
+        self.signed_out = False   # every API call answers 401
         self.lock = threading.Lock()
         fake = self
 
@@ -65,12 +68,12 @@ class FakeGitHub:
                 p = self.api()
                 if p is None:
                     return super().do_GET()
-                if not self.headers.get("Authorization", "").startswith("Bearer "):
+                if fake.signed_out or not self.headers.get("Authorization", "").startswith("Bearer "):
                     return self.send(401, {"message": "Requires authentication"})
                 if p == "/user":
                     return self.send(200, {"login": "tester"})
                 if p == f"/repos/{REPO}":
-                    return self.send(200, {"full_name": REPO, "permissions": {"push": True, "admin": False}})
+                    return self.send(200, {"full_name": REPO, "permissions": {"push": fake.push, "admin": False}})
                 prefix = f"/repos/{REPO}/contents/"
                 if not p.startswith(prefix):
                     return self.send(404, {"message": "Not Found"})
@@ -111,6 +114,9 @@ class FakeGitHub:
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 f = fake.store / unquote(p[len(prefix):])
                 with fake.lock:
+                    if fake.conflicts:
+                        fake.conflicts -= 1
+                        return self.send(409, {"message": "is at another sha"})
                     current = sha(f.read_bytes()) if f.exists() else None
                     if body.get("sha") != current:
                         return self.send(409 if current else 422, {"message": "sha does not match"})
