@@ -122,7 +122,7 @@ def _name(a):
     return _tex(a.get("family", ""))
 
 
-def make_entry(key, c, pdf=True):
+def make_entry(key, c, pdf=None):
     kind = c.get("type")
     bibtype = {"journal-article": "article", "proceedings-article": "inproceedings",
                "paper-conference": "inproceedings", "book": "book", "book-chapter": "incollection",
@@ -143,8 +143,8 @@ def make_entry(key, c, pdf=True):
         f["issn"] = c["ISSN"][0] if isinstance(c["ISSN"], list) else c["ISSN"]
     f["doi"] = c.get("DOI", "")
     f["url"] = "https://doi.org/" + c.get("DOI", "")
-    if pdf:
-        f["file"] = key + ".pdf"
+    if pdf:                                      # the `file` field: the PDF's path in the store
+        f["file"] = key + ".pdf" if pdf is True else pdf
     body = ",\n".join(f"  {n} = {{{v}}}" for n, v in f.items() if v)
     raw = f"@{bibtype}{{{key},\n{body}\n}}"
     return Entry(bibtype, key, raw, f)

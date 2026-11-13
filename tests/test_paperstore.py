@@ -48,6 +48,25 @@ def test_demo_store_checks_clean(store):
     assert ex.value.code == 0
 
 
+def test_pdfs_can_live_in_a_folder(store, capsys):
+    (store / "pdfs").mkdir()
+    (store / "AbiAkl2023.pdf").rename(store / "pdfs" / "AbiAkl2023.pdf")
+    bibf = store / "references.bib"
+    bibf.write_text(bibf.read_text(encoding="utf-8").replace("{AbiAkl2023.pdf}", "{pdfs/AbiAkl2023.pdf}"), encoding="utf-8")
+    cfg = store / "paperstore.toml"
+    cfg.write_text((cfg.read_text(encoding="utf-8") if cfg.exists() else "") + '\npdfs = "pdfs"\n', encoding="utf-8")
+    with pytest.raises(SystemExit) as ex:
+        main(["--store", str(store), "check"])
+    assert ex.value.code == 0, capsys.readouterr().out
+    # a PDF left beside the bib is now out of place
+    (store / "pdfs" / "AbiAkl2023.pdf").rename(store / "AbiAkl2023.pdf")
+    bibf.write_text(bibf.read_text(encoding="utf-8").replace("{pdfs/AbiAkl2023.pdf}", "{AbiAkl2023.pdf}"), encoding="utf-8")
+    with pytest.raises(SystemExit) as ex:
+        main(["--store", str(store), "check"])
+    assert ex.value.code == 1
+    assert "move it to pdfs/AbiAkl2023.pdf" in capsys.readouterr().out
+
+
 def test_a_moved_quote_fails_check(store):
     notes = json.loads((store / "annotations" / "AbiAkl2023.json").read_text())
     q = next(n for n in notes["annotations"] if n.get("quote"))

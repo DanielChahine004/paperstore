@@ -65,12 +65,13 @@ def cmd_add(s, args):
     c = recs.get(doi.lower()) or records.fetch(doi)
     recs[doi.lower()] = c
     key = args.key or records.make_key(c, [e.key for e in s.entries])
-    e = records.make_entry(key, c, pdf=bool(args.pdf))
+    e = records.make_entry(key, c, pdf=s.pdf_field(key) if args.pdf else None)
     if args.pdf:
         src = Path(args.pdf)
         if not src.read_bytes().startswith(b"%PDF"):
             sys.exit(f"{src} is not a PDF")
-        dest = s.root / f"{key}.pdf"
+        dest = s.pdf_path(key)
+        dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dest)
         problem = pdf.identity_problem(dest, e, s.cache)
         if problem and not args.force:
@@ -81,7 +82,7 @@ def cmd_add(s, args):
     s.entries = bib.insert(s.entries, e)
     s.save()
     s.save_records(recs)
-    print(f"added {key}: {c.get('title', '')}" + ("" if args.pdf else "  (no PDF yet: save it as " + key + ".pdf)"))
+    print(f"added {key}: {c.get('title', '')}" + ("" if args.pdf else "  (no PDF yet: save it as " + s.pdf_field(key) + ")"))
     print(e.raw)
 
 
@@ -128,24 +129,26 @@ def _check_files(s):
         f = s.pdf(e)
         if f is None:
             if e.kind != "book" and "nopdf" not in e.fields:
-                out.append(f"{e.key}: no PDF (add file = {{{e.key}.pdf}}, or nopdf = {{reason}})")
+                out.append(f"{e.key}: no PDF (add file = {{{s.pdf_field(e.key)}}}, or nopdf = {{reason}})")
             continue
-        named.add(f.name)
+        named.add(f.resolve())
         if not f.exists():
             out.append(f"{e.key}: {f.name} is missing")
         elif f.stem != e.key:
             out.append(f"{e.key}: its PDF is {f.name}; name it {e.key}.pdf")
+        elif f.parent != s.pdf_dir:
+            out.append(f"{e.key}: its PDF is not in the store's PDF folder; move it to {s.pdf_field(e.key)}")
         else:
             p = pdf.identity_problem(f, e, s.cache)
             if p and "identity" not in _excused(e):
                 out.append(p)
-    out += [f"{p.name}: no entry in references.bib" for p in sorted(s.root.glob("*.pdf")) if p.name not in named]
+    out += [f"{p.name}: no entry in references.bib" for p in sorted(s.pdf_dir.glob("*.pdf")) if p.resolve() not in named]
     return out
 
 
 def _check_thumbs(s, fix):
     out = []
-    pdfs = {p.stem: p for p in s.root.glob("*.pdf")}
+    pdfs = {p.stem: p for p in s.pdf_dir.glob("*.pdf")}
     for key, p in sorted(pdfs.items()):
         t = s.thumbs / f"{key}.jpg"
         if not t.exists():
@@ -166,7 +169,7 @@ def _check_thumbs(s, fix):
 
 def _anchor(s, key, n):
     """The anchor a note's quote has now: (hit, problem)."""
-    path = s.root / f"{key}.pdf"
+    path = s.pdf_path(key)
     q = n.get("quote") or {}
     hits = pdf.find(path, q["exact"], n.get("page"), q.get("prefix", ""), q.get("suffix", ""))
     if not hits and (q.get("prefix") or q.get("suffix")):
@@ -185,7 +188,7 @@ def _check_notes(s, fix):
         if key not in keys:
             out.append(f"annotations/{key}.json: no entry {key}")
             continue
-        if not (s.root / f"{key}.pdf").exists():
+        if not s.pdf_path(key).exists():
             out.append(f"annotations/{key}.json: {key}.pdf is missing")
             continue
         ids = [n.get("id") for n in notes]
@@ -193,7 +196,7 @@ def _check_notes(s, fix):
         changed = False
         for n in notes:
             if n.get("kind", "quote") == "area":
-                if not n.get("rects") or not 1 <= n.get("page", 0) <= pdf.page_count(s.root / f"{key}.pdf"):
+                if not n.get("rects") or not 1 <= n.get("page", 0) <= pdf.page_count(s.pdf_path(key)):
                     out.append(f"{key}/{n['id']}: area note needs a page and rects")
                 continue
             hit, problem = _anchor(s, key, n)
@@ -228,7 +231,7 @@ def cmd_check(s, args):
     n_notes = sum(len(v) for v in s.all_notes().values())
     for p in problems:
         print(p)
-    print(f"{len(s.entries)} entries, {len(list(s.root.glob('*.pdf')))} PDFs, {n_notes} annotations: "
+    print(f"{len(s.entries)} entries, {len(list(s.pdf_dir.glob('*.pdf')))} PDFs, {n_notes} annotations: "
           + (f"{len(problems)} problem(s)" if problems else "all checks pass"))
     sys.exit(1 if problems else 0)
 

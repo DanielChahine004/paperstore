@@ -1,11 +1,12 @@
 """A paper store: one folder holding the bibliography, the PDFs and the annotations.
 
     references.bib            the bibliography; each entry's `file` names its PDF
-    <Key>.pdf                 one PDF per entry, named by its key
+    <Key>.pdf                 one PDF per entry, named by its key (in `pdfs`, if set)
     records.json              doi.org records for every DOI, the witness the checks use
     annotations/<Key>.json    highlights, notes and cited quotes for one paper
     thumbs/<Key>.jpg          the first page, small, for the viewer's library
-    paperstore.toml           optional: viewer URL and the GitHub repo
+    paperstore.toml           optional: viewer URL, the GitHub repo, and pdfs = "pdfs"
+                              to keep the PDFs in that folder instead of beside the bib
     .paperstore/              local cache (page text), never committed
 """
 import json
@@ -28,6 +29,15 @@ class Store:
         self.thumbs = self.root / "thumbs"
         cfg = self.root / "paperstore.toml"
         self.config = tomllib.loads(cfg.read_text(encoding="utf-8")) if cfg.exists() else {}
+        self.pdf_dir = self.root / self.config.get("pdfs", "")
+
+    def pdf_path(self, key):
+        """Where key's PDF belongs."""
+        return self.pdf_dir / f"{key}.pdf"
+
+    def pdf_field(self, key):
+        """key's `file` field: its PDF, relative to the store."""
+        return self.pdf_path(key).relative_to(self.root).as_posix()
 
     # -- bibliography
     def load(self):

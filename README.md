@@ -20,7 +20,8 @@ Any git repository (private, if the PDFs are under copyright) laid out as:
     <Key>.pdf                 one per entry, named by its key
     records.json              the doi.org record of every DOI, cached
     annotations/<Key>.json    quotes, boxes, notes, tags, values, status
-    paperstore.toml           optional: viewer = "https://you.github.io/paperstore/"
+    paperstore.toml           optional: viewer = "https://you.github.io/paperstore/",
+                              and pdfs = "pdfs" to keep the PDFs in pdfs/<Key>.pdf
 
 ## The tool
 
