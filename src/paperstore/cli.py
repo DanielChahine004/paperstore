@@ -167,6 +167,48 @@ def _check_thumbs(s, fix):
     return out
 
 
+def _check_figures(s, fix):
+    """figures/<Key>/<id>.png for every box annotation, cut from the box it records
+    (figures/index.json holds the page and box each was cut from, so a moved box
+    is a stale picture); a picture with no box left is stale too."""
+    out = []
+    idx_path = s.figures / "index.json"
+    index = json.loads(idx_path.read_text(encoding="utf-8")) if idx_path.exists() else {}
+    want = {}
+    for key, notes in s.all_notes().items():
+        for n in notes:
+            if n.get("kind") == "area" and n.get("rects") and n.get("page"):
+                want[f"{key}/{n['id']}"] = {"page": n["page"], "rect": n["rects"][0]}
+    entries = {e.key: e for e in s.entries}
+    for ref, box in sorted(want.items()):
+        png = s.figures / f"{ref}.png"
+        if png.exists() and index.get(ref) == box:
+            continue
+        key = ref.split("/")[0]
+        path = s.pdf(entries[key]) if key in entries else None
+        if fix and path and path.exists():
+            pdf.crop(path, box["page"], box["rect"], png)
+            index[ref] = box
+            print(f"made figures/{ref}.png")
+        else:
+            out.append(f"figures/{ref}.png is {'out of date' if png.exists() else 'missing'} (run: paperstore check --fix)")
+    for png in sorted(s.figures.glob("*/*.png")) if s.figures.exists() else []:
+        ref = f"{png.parent.name}/{png.stem}"
+        if ref not in want:
+            if fix:
+                png.unlink()
+                index.pop(ref, None)
+                if not any(png.parent.iterdir()):
+                    png.parent.rmdir()
+            else:
+                out.append(f"figures/{ref}.png: no such box (run: paperstore check --fix)")
+    if fix and (index or idx_path.exists()):
+        index = {r: b for r, b in index.items() if r in want}
+        s.figures.mkdir(exist_ok=True)
+        idx_path.write_text(json.dumps(dict(sorted(index.items())), indent=1) + "\n", encoding="utf-8", newline="\n")
+    return out
+
+
 def _anchor(s, key, n):
     """The anchor a note's quote has now: (hit, problem)."""
     path = s.pdf_path(key)
@@ -218,7 +260,7 @@ def _check_notes(s, fix):
 
 
 def cmd_check(s, args):
-    problems = _check_bib(s) + _check_files(s) + _check_thumbs(s, args.fix) + _check_notes(s, args.fix)
+    problems = _check_bib(s) + _check_files(s) + _check_thumbs(s, args.fix) + _check_notes(s, args.fix) + _check_figures(s, args.fix)
     if args.live:
         recs = s.records()
         for e in s.entries:

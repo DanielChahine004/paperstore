@@ -84,6 +84,33 @@ def test_annotate_writes_an_anchored_note(store, capsys):
     assert n["page"] == 4 and n["rects"] and n["quote"]["prefix"]
 
 
+def test_a_box_gets_its_picture(store, capsys):
+    def check(*extra):
+        with pytest.raises(SystemExit) as ex:
+            main(["--store", str(store), "check", *extra])
+        return ex.value.code, capsys.readouterr().out
+    assert check()[0] == 0
+    main(["--store", str(store), "annotate", "AbiAkl2023", "--area", "0.1,0.1,0.5,0.3", "-p", "2", "--by", "test"])
+    path = store / "annotations" / "AbiAkl2023.json"
+    notes = json.loads(path.read_text())
+    ref = f"AbiAkl2023/{notes['annotations'][-1]['id']}"
+    code, out = check()
+    assert code == 1 and f"figures/{ref}.png is missing" in out
+    code, out = check("--fix")
+    png = store / "figures" / f"{ref}.png"
+    assert code == 0 and png.read_bytes().startswith(b"\x89PNG")
+    # the box moves: the picture is out of date until --fix cuts it again
+    notes["annotations"][-1]["rects"] = [[0.2, 0.2, 0.6, 0.4]]
+    path.write_text(json.dumps(notes))
+    assert "out of date" in check()[1]
+    assert check("--fix")[0] == 0
+    # the box goes: so does its picture
+    notes["annotations"].pop()
+    path.write_text(json.dumps(notes))
+    assert "no such box" in check()[1]
+    assert check("--fix")[0] == 0 and not png.exists()
+
+
 def test_an_ambiguous_quote_is_refused(store):
     with pytest.raises(SystemExit) as ex:
         main(["--store", str(store), "annotate", "AbiAkl2023", "bore diameter of 70 cm"])

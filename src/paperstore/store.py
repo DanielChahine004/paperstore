@@ -5,6 +5,8 @@
     records.json              doi.org records for every DOI, the witness the checks use
     annotations/<Key>.json    highlights, notes and cited quotes for one paper
     thumbs/<Key>.jpg          the first page, small, for the viewer's library
+    figures/<Key>/<id>.png    each box annotation's picture, made by check --fix
+    figures/index.json        the page and box each picture was cut from
     paperstore.toml           optional: viewer URL, the GitHub repo, and pdfs = "pdfs"
                               to keep the PDFs in that folder instead of beside the bib
     .paperstore/              local cache (page text), never committed
@@ -27,6 +29,7 @@ class Store:
         self.notes_dir = self.root / "annotations"
         self.cache = self.root / ".paperstore"
         self.thumbs = self.root / "thumbs"
+        self.figures = self.root / "figures"
         cfg = self.root / "paperstore.toml"
         self.config = tomllib.loads(cfg.read_text(encoding="utf-8")) if cfg.exists() else {}
         self.pdf_dir = self.root / self.config.get("pdfs", "")

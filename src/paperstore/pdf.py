@@ -137,6 +137,17 @@ def figures(path, page):
         return out
 
 
+def crop(path, page, rect, out, dpi=200):
+    """A box (page fractions) as a PNG: the picture a box annotation marks."""
+    with pymupdf.open(path) as doc:
+        p = doc[page - 1]
+        W, H = p.rect.width, p.rect.height
+        x0, y0, x1, y1 = rect
+        pix = p.get_pixmap(clip=pymupdf.Rect(x0 * W, y0 * H, x1 * W, y1 * H), dpi=dpi)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(pix.tobytes("png"))
+
+
 def thumbnail(path, out, width=240):
     """The first page as a small JPEG, for the viewer's library."""
     with pymupdf.open(path) as doc:
