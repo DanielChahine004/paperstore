@@ -219,11 +219,39 @@ function signinView(err) {
 		err ? el("p", { style: "color:var(--bad)" }, err) : null,
 		el("label", { class: "muted", style: "font-size:13px" }, "Store", repo),
 		CFG.auth ? el("button", { class: "btn primary", style: "justify-content:center;padding:10px", onclick: () => { remember(); auth.login(); } }, "Sign in with GitHub") : null,
+		CFG.auth ? el("button", { class: "btn", style: "justify-content:center;padding:10px;border:1px solid var(--line)", onclick: (e) => { remember(); codeSignin(e.target.closest(".signin")); } }, "Sign in with a code (from another device)") : null,
 		el("details", {}, el("summary", { class: "muted", style: "font-size:13px;cursor:pointer" }, "Use an access token instead"),
 			el("form", { style: "display:grid;gap:8px;margin-top:8px", onsubmit: (e) => { e.preventDefault(); remember(); auth.set(e.target.tok.value.trim()); start(); } },
 				el("input", { name: "tok", type: "password", autocomplete: "off", placeholder: "fine-grained token: Contents read and write" }),
 				el("button", { class: "btn", style: "justify-content:center;border:1px solid var(--line)" }, "Use token"))),
 		el("p", { style: "font-size:13px" }, el("a", { href: "?demo" }, "Open the demo"), " — one open-access paper, no sign-in.")));
+}
+
+// GitHub's device flow: show a code, the person approves it at github.com/login/device on any
+// device (a phone), and the token comes back here through the sign-in helper.
+async function codeSignin(box) {
+	const base = CFG.auth.replace(/\/$/, ""), post = (path, body) => fetch(base + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) }).then((r) => r.json());
+	const out = el("div", { class: "codebox", style: "display:grid;gap:8px;text-align:center" }, el("p", { class: "muted" }, "Asking GitHub for a code…"));
+	box.querySelector(".codebox")?.remove();
+	box.append(out);
+	let d;
+	try { d = await post("/device"); } catch { d = {}; }
+	if (!d.device_code) return out.replaceChildren(el("p", { style: "color:var(--bad)" }, "GitHub gave no code: " + (d.error_description || d.error || "the sign-in helper did not answer")));
+	out.replaceChildren(
+		el("p", {}, "On any device signed in to GitHub, open ", el("a", { href: d.verification_uri, target: "_blank", rel: "noopener" }, d.verification_uri.replace(/^https:\/\//, "")), " and enter"),
+		el("div", { class: "usercode", style: "font:600 28px ui-monospace,monospace;letter-spacing:3px" }, d.user_code),
+		el("p", { class: "muted", style: "font-size:13px" }, "Check it says paperstore-daniel before approving. Waiting…"));
+	let wait = (d.interval || 5) * 1000;
+	const until = Date.now() + (d.expires_in || 900) * 1000;
+	while (Date.now() < until && out.isConnected) {
+		await new Promise((r) => setTimeout(r, wait));
+		let t;
+		try { t = await post("/device/poll", { device_code: d.device_code }); } catch { continue; }
+		if (t.access_token) { auth.set(t.access_token, t.refresh_token, t.expires_in); return start(); }
+		if (t.error === "slow_down") wait = ((t.interval || wait / 1000 + 5) * 1000);
+		else if (t.error !== "authorization_pending") return out.replaceChildren(el("p", { style: "color:var(--bad)" }, t.error === "access_denied" ? "The code was declined." : "Sign-in failed: " + t.error));
+	}
+	if (out.isConnected) out.replaceChildren(el("p", { style: "color:var(--bad)" }, "The code expired. Try again."));
 }
 
 // ---- library ------------------------------------------------------------------------------

@@ -97,3 +97,16 @@ def test_status_survives_reload(page, gh):
     seg(page, nid).wait_for(timeout=30000)
     assert seg(page, nid).locator("button.on").inner_text() == "Verified"
     assert not page.errors
+
+
+def test_sign_in_with_a_code(gh):
+    with pw.sync_playwright() as p:
+        browser = p.chromium.launch()
+        pg = browser.new_page(viewport={"width": 390, "height": 844})
+        pg.goto(gh.url)
+        pg.get_by_text("Sign in with a code").click()
+        pg.get_by_text("ABCD-1234").wait_for(timeout=10000)
+        pg.get_by_text(KEY, exact=False).first.wait_for(timeout=30000)   # the library, once approved
+        assert pg.evaluate("localStorage.getItem('ps.token')") == "fake-device-token"
+        assert gh.polls == 2
+        browser.close()

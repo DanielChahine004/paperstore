@@ -13,6 +13,11 @@
 //   GET  /login?then=/Key&back=<viewer url>   -> GitHub's sign-in page
 //   GET  /callback?code=...&state=...          -> back to the viewer with #token=...
 //   POST /refresh {refresh_token}              -> a new token, before the old one expires
+//   POST /device                               -> a code to type at github.com/login/device
+//   POST /device/poll {device_code}            -> the token once the code is approved,
+//                                                 else {error: "authorization_pending" | ...}
+// The /device pair is GitHub's device flow (sign in on another device, e.g. a phone);
+// it needs "Enable Device Flow" ticked in the GitHub App's settings, and no secret.
 
 export default {
 	async fetch(req, env) {
@@ -57,15 +62,32 @@ export default {
 				{ headers: { ...cors, "Content-Type": "application/json" } });
 		}
 
+		if (url.pathname === "/device" || url.pathname === "/device/poll") {
+			if (req.method === "OPTIONS") return new Response(null, { headers: cors });
+			if (req.method !== "POST") return new Response("POST only", { status: 405, headers: cors });
+			const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { ...cors, "Content-Type": "application/json" } });
+			if (url.pathname === "/device") {
+				const r = await gh("https://github.com/login/device/code", { client_id: env.CLIENT_ID });
+				if (!r.device_code) return json(r, 502);
+				return json({ device_code: r.device_code, user_code: r.user_code, verification_uri: r.verification_uri, interval: r.interval, expires_in: r.expires_in });
+			}
+			const { device_code } = await req.json().catch(() => ({}));
+			if (!device_code) return json({ error: "no device_code" }, 400);
+			const tok = await gh("https://github.com/login/oauth/access_token",
+				{ client_id: env.CLIENT_ID, device_code, grant_type: "urn:ietf:params:oauth:grant-type:device_code" });
+			if (!tok.access_token) return json({ error: tok.error || "unknown", interval: tok.interval });
+			return json({ access_token: tok.access_token, refresh_token: tok.refresh_token, expires_in: tok.expires_in });
+		}
+
 		return new Response("paperstore sign-in helper", { status: 404 });
 	},
 };
 
-async function exchange(env, params) {
-	const r = await fetch("https://github.com/login/oauth/access_token", {
-		method: "POST",
-		headers: { Accept: "application/json", "Content-Type": "application/json" },
-		body: JSON.stringify({ client_id: env.CLIENT_ID, client_secret: env.CLIENT_SECRET, ...params }),
-	});
-	return r.json();
+async function gh(url, body) {
+	const r = await fetch(url, { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify(body) });
+	return r.json().catch(() => ({ error: `GitHub said ${r.status}` }));
+}
+
+function exchange(env, params) {
+	return gh("https://github.com/login/oauth/access_token", { client_id: env.CLIENT_ID, client_secret: env.CLIENT_SECRET, ...params });
 }

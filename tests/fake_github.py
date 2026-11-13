@@ -31,6 +31,7 @@ class FakeGitHub:
     def __init__(self, store):
         self.store = Path(store)
         self.commits = []   # (path, message) of each accepted PUT
+        self.polls = 0      # device-flow polls; the second one is approved
         self.lock = threading.Lock()
         fake = self
 
@@ -59,7 +60,7 @@ class FakeGitHub:
             def do_GET(self):
                 if urlsplit(self.path).path == "/config.js":
                     base = f"http://{self.headers['Host']}"
-                    cfg = {"repo": REPO, "branch": "main", "auth": "", "demo": "demo/", "api": base + "/api"}
+                    cfg = {"repo": REPO, "branch": "main", "auth": base + "/auth", "demo": "demo/", "api": base + "/api"}
                     return self.send(200, f"window.PAPERSTORE = {json.dumps(cfg)};".encode(), "text/javascript")
                 p = self.api()
                 if p is None:
@@ -89,6 +90,18 @@ class FakeGitHub:
                     return self.send(200, data, "application/octet-stream", cache)
                 return self.send(200, {"name": f.name, "path": rel, "sha": sha(data), "size": len(data), "type": "file",
                                        "encoding": "base64", "content": base64.encodebytes(data).decode()}, headers=cache)
+
+            def do_POST(self):   # the sign-in helper's device flow (worker/worker.js)
+                path = urlsplit(self.path).path
+                if path == "/auth/device":
+                    return self.send(200, {"device_code": "dev123", "user_code": "ABCD-1234", "verification_uri": "https://github.com/login/device",
+                                           "interval": 1, "expires_in": 900})
+                if path == "/auth/device/poll":
+                    fake.polls += 1
+                    if fake.polls < 2:
+                        return self.send(200, {"error": "authorization_pending"})
+                    return self.send(200, {"access_token": "fake-device-token", "refresh_token": "r", "expires_in": 28800})
+                return self.send(404, {"message": "Not Found"})
 
             def do_PUT(self):
                 p = self.api()
