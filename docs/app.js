@@ -92,16 +92,25 @@ class GitHubSource {
 		this.isAdmin = !!perms.admin;    // who may manage access, on GitHub's own page
 		return login;
 	}
-	raw(path) { return this.req(`contents/${encodeURI(path)}?ref=${this.branch}`, { headers: { Accept: "application/vnd.github.raw" } }); }
+	raw(path) { return this.req(`contents/${encodeURI(path)}?ref=${this.branch}`, { cache: "no-cache", headers: { Accept: "application/vnd.github.raw" } }); }   // revalidated, so a reload shows the latest save
 	async text(path) { const r = await this.raw(path); if (r.status === 404) return null; if (!r.ok) throw new Error(`${path}: GitHub said ${r.status}`); return r.text(); }
 	async bytes(path) { const r = await this.raw(path); if (!r.ok) throw new Error(`${path}: GitHub said ${r.status}`); return r.arrayBuffer(); }
 	async blob(path) { const r = await this.raw(path); return r.ok ? r.blob() : null; }
 	async list(dir) { const r = await this.req(`contents/${dir}?ref=${this.branch}`); return r.ok ? (await r.json()).map((f) => f.name) : []; }
 	async update(path, change, message) {   // read-modify-write on the file's sha; retried if someone saved in between
 		for (let i = 0; i < 3; i++) {
-			const r = await this.req(`contents/${encodeURI(path)}?ref=${this.branch}`);
+			// no-store: a cached copy would be the raw file text() fetched (same URL, other Accept),
+			// which has no sha or content, and a stale sha would only bounce the save
+			const r = await this.req(`contents/${encodeURI(path)}?ref=${this.branch}`, { cache: "no-store", headers: { Accept: "application/vnd.github.object+json" } });
 			let sha, old = null;
-			if (r.ok) { const j = await r.json(); sha = j.sha; old = new TextDecoder().decode(Uint8Array.from(atob(j.content.replace(/\n/g, "")), (c) => c.charCodeAt(0))); }
+			if (r.ok) {
+				const j = await r.json();
+				if (!j.sha) throw new Error(`save failed: GitHub sent no version of ${path}; reload and try again`);
+				sha = j.sha;
+				old = j.content   // over 1 MB GitHub leaves content empty; read the raw file instead
+					? new TextDecoder().decode(Uint8Array.from(atob(j.content.replace(/\n/g, "")), (c) => c.charCodeAt(0)))
+					: await (await this.req(`contents/${encodeURI(path)}?ref=${this.branch}`, { cache: "no-store", headers: { Accept: "application/vnd.github.raw" } })).text();
+			}
 			const body = change(old), bytes = new TextEncoder().encode(body);
 			let bin = ""; bytes.forEach((b) => (bin += String.fromCharCode(b)));
 			const put = await this.req(`contents/${encodeURI(path)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message, content: btoa(bin), sha, branch: this.branch }) });
