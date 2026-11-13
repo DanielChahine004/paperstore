@@ -83,3 +83,15 @@ everyone are welcome back as pull requests.
 ## Licence
 
 MIT. The demo paper is CC BY 4.0; see `docs/demo/README.md`.
+
+## Tests
+
+```
+uv run --with pytest pytest tests/test_paperstore.py            # the CLI
+uv run --with pytest --with playwright pytest tests/test_viewer.py   # the viewer, in headless Chromium
+```
+
+The viewer tests run against `tests/fake_github.py`, a local stand-in for GitHub's contents
+API. It needs no sign-in and caches the way a phone browser did. For the first run, install
+Chromium with `uv run --with playwright playwright install chromium`. To click around by hand,
+run `uv run python tests/fake_github.py` and set `localStorage["ps.token"]` to any value.

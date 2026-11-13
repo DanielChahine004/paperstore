@@ -7,6 +7,7 @@ import * as pdfjs from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pd
 pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
 
 const CFG = window.PAPERSTORE || {};
+const API = (CFG.api || "https://api.github.com").replace(/\/$/, "");   // tests point this at a fake GitHub
 const params = new URLSearchParams(location.search);
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -76,13 +77,13 @@ const auth = {
 class GitHubSource {
 	constructor(repo, branch) { this.repo = repo; this.branch = branch || "main"; this.writable = true; }
 	async req(path, opts = {}) {
-		const r = await fetch(`https://api.github.com/repos/${this.repo}${path ? "/" + path : ""}`, {   // no trailing slash: GitHub 404s it
+		const r = await fetch(`${API}/repos/${this.repo}${path ? "/" + path : ""}`, {   // no trailing slash: GitHub 404s it
 			...opts, headers: { Authorization: `Bearer ${await auth.fresh()}`, "X-GitHub-Api-Version": "2022-11-28", ...(opts.headers || {}) } });
 		if (r.status === 401) { auth.clear(); throw new Error("signed out: sign in again"); }
 		return r;
 	}
 	async user() {
-		const r = await fetch("https://api.github.com/user", { headers: { Authorization: `Bearer ${await auth.fresh()}` } });
+		const r = await fetch(API + "/user", { headers: { Authorization: `Bearer ${await auth.fresh()}` } });
 		if (!r.ok) throw new Error(r.status === 401 ? "GitHub refused the sign-in" : `GitHub said ${r.status}`);
 		const login = (await r.json()).login;
 		const repo = await this.req("");
