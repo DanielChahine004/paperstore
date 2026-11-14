@@ -63,7 +63,9 @@ browser, so the site holds no papers, and it works on a phone.
 - **Reader:** select text and press **Claim**, or **Box** (key B) to mark a
   figure or table; mark claims verified or disputed; find in the paper; copy a
   link that opens the paper at a claim (`#/Key/id`). Each save is a commit by
-  the person who made it.
+  the person who made it. `#/Key/p<page>/<quote>` (the quote URL-encoded) opens
+  the paper at that page with the quote highlighted and saves nothing, for
+  linking a passage from elsewhere.
 - **A study's manuscript:** `?study=owner/repo` opens the draft of a paper
   written in a repository laid out like the
   [study template](https://github.com/DanielChahine004/study-template), whose

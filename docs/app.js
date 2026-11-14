@@ -1,7 +1,8 @@
 // Paper Store viewer: reads a paper store from a GitHub repo in the browser, shows each
 // PDF with its claims (quote- or box-anchored annotations), and saves edits back as commits.
 // Same files as the paperstore CLI: references.bib, <Key>.pdf, thumbs/<Key>.jpg,
-// annotations/<Key>.json. Views: #/ library, #/claims, #/<Key>[/<claim id>].
+// annotations/<Key>.json. Views: #/ library, #/claims, #/<Key>[/<claim id>], and #/<Key>/p<page>/<quote> (a quote
+// opened from elsewhere at its page and highlighted, with nothing saved: the explainer videos' sources link here).
 import * as pdfjs from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
 
 pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
@@ -453,9 +454,11 @@ function setPanel(on) {
 	document.body.classList.toggle("paneled", on);
 }
 
-async function readerView(key, claimId) {
+async function readerView(key, claimId, quote) {
 	const paper = S.byKey[key];
 	if (!paper) return libraryView();
+	const at = /^p(\d+)$/.exec(claimId || "");   // #/<Key>/p<page>/<quote>: claim ids are hex, so never p<digits>
+	if (at) claimId = null;
 	if (!R || R.key !== key) {
 		R = { key, paper, tab: "claims", panel: !small() || !!claimId };
 		readerBar();
@@ -468,6 +471,45 @@ async function readerView(key, claimId) {
 		drawPanel();
 	}
 	if (claimId) { R.tab = "claims"; if (!R.panel) togglePanel(true); selectClaim(claimId, true); }
+	if (at) await showQuote(Number(at[1]), quote ? decodeURIComponent(quote) : "");
+}
+
+// ---- a quote at its page, from a link ------------------------------------------------------
+// Matched as the CLI matches a quote (case, spacing, ligatures and dashes ignored), on the page's text items, and
+// highlighted over the part of each item it covers. Drawn until another link or a reload; never saved.
+const qnorm = (s) => s.normalize("NFKC").toLowerCase().replace(/[‐-―−]/g, "-").replace(/­/g, "").replace(/\s+/g, "");
+async function quoteRects(n, quote) {
+	const page = await R.doc.getPage(n), vp = page.getViewport({ scale: 1 }), items = (await page.getTextContent()).items;
+	const q = qnorm(quote);
+	for (const dropHyphen of [false, true]) {   // "detec-" at a line end and "tor" on the next read as "detector"
+		let s = ""; const owner = [], off = [];
+		items.forEach((it, i) => {
+			let t = qnorm(it.str);
+			if (dropHyphen && it.hasEOL && t.endsWith("-")) t = t.slice(0, -1);
+			for (let k = 0; k < t.length; k++) { owner.push(i); off.push(k / Math.max(t.length, 1)); }
+			s += t;
+		});
+		const a = s.indexOf(q);
+		if (a < 0 || !q) continue;
+		const b = a + q.length - 1, out = [];
+		for (const i of new Set(owner.slice(a, b + 1))) {
+			const it = items[i], [x, y] = [it.transform[4], it.transform[5]], h = Math.hypot(it.transform[2], it.transform[3]) || it.height;
+			const f0 = owner[a] === i ? off[a] : 0, f1 = owner[b] === i ? off[b] + 1 / Math.max(qnorm(it.str).length, 1) : 1;
+			const [x0, y0, x1, y1] = vp.convertToViewportRectangle([x + it.width * f0, y - 0.22 * h, x + it.width * Math.min(f1, 1), y + 0.9 * h]);
+			out.push([Math.min(x0, x1) / vp.width, Math.min(y0, y1) / vp.height, Math.max(x0, x1) / vp.width, Math.max(y0, y1) / vp.height]);
+		}
+		return out;
+	}
+	return [];
+}
+async function showQuote(n, quote) {
+	n = Math.max(1, Math.min(R.doc.numPages, n || 1));
+	R.quote = quote ? { page: n, text: quote, rects: await quoteRects(n, quote) } : null;
+	drawHighlights();
+	const P = R.pages[n], r = R.quote?.rects?.[0];
+	if (!r) { goPage(n, false); if (quote) toast(`That quote is not on page ${n}`); return; }
+	scrollTo({ top: Math.max(0, P.div.offsetTop + r[1] * P.h - (small() ? 90 : innerHeight / 3)), behavior: "auto" });
+	setTimeout(() => $$(".hl.quote").forEach((h) => h.classList.add("flash")), 300);
 }
 
 function readerBar() {
@@ -550,6 +592,9 @@ function drawHighlights() {
 				onclick: () => { if (!R.panel) togglePanel(true); R.tab = "claims"; selectClaim(n.id, false); } }));
 		}
 	}
+	const Q = R.quote, QP = Q && R.pages[Q.page];
+	if (QP) for (const [x0, y0, x1, y1] of Q.rects) QP.div.append(el("div", { class: "hl quote sel", title: Q.text,
+		style: `left:${x0 * 100}%;top:${y0 * 100}%;width:${(x1 - x0) * 100}%;height:${(y1 - y0) * 100}%` }));
 }
 
 const currentPage = () => { const mid = scrollY + innerHeight / 3; let best = 1; for (let n = 1; n < R.pages.length; n++) if (R.pages[n].div.offsetTop <= mid) best = n; return best; };
@@ -1091,7 +1136,7 @@ async function route() {
 		if (S.study && (!a || a === "fact" || a === "claim")) return await studyView(a ? a : null, a === "fact" ? decodeURIComponent(b) : a === "claim" ? `${decodeURIComponent(b)}/${c}` : null);
 		if (!a || a === "library") { R = null; return libraryView(); }
 		if (a === "claims") { R = null; return await claimsView(); }
-		return await readerView(decodeURIComponent(a), b);
+		return await readerView(decodeURIComponent(a), b, c);
 	} catch (e) { $("#main").replaceChildren(el("div", { class: "wrap" }, el("p", {}, "Could not open this: " + e.message), el("a", { href: "#/" }, "Back to the library"))); }
 }
 

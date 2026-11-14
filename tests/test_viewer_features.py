@@ -197,3 +197,16 @@ def test_dark_mode_dims_pages_and_quotes_read_as_quotes(gh):
         assert q.evaluate("(e) => getComputedStyle(e, '::before').content") == '"“"'
         assert pg.locator(".claim .note").first.evaluate("(e) => getComputedStyle(e, '::before').content") == '"Note"'
         b.close()
+
+
+def test_quote_link_opens_page_and_highlights_it(page, gh):
+    # #/<Key>/p<page>/<quote>: a link from elsewhere (the explainer videos' sources), across a line-end hyphen
+    q = "the University of Pennsylvania, resulted in the first TB-PET systems"
+    page.goto(f"{gh.url}#/{KEY}/p2/" + __import__("urllib.parse").parse.quote(q, safe=""))
+    assert wait_for(page, lambda: page.locator(".page[data-n='2'] .hl.quote").count() >= 2, 30000)
+    box = page.locator(".page[data-n='2'] .hl.quote").first.bounding_box()
+    assert box and box["width"] > 20 and box["height"] > 5
+    assert page.evaluate("Math.abs(document.querySelector(\".page[data-n='2'] .hl.quote\").getBoundingClientRect().top) < innerHeight")
+    page.goto(f"{gh.url}#/{KEY}/p3/" + __import__("urllib.parse").parse.quote(q, safe=""))
+    assert wait_for(page, lambda: page.locator(".hl.quote").count() == 0)
+    assert not page.errors
