@@ -13,5 +13,5 @@ dependencies = ["pymupdf>=1.24"]
 paperstore = "paperstore.cli:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]   # PEP 639 license-files (a list) needs 1.27
 build-backend = "hatchling.build"
