@@ -156,6 +156,23 @@ def test_fits_a_phone(gh):
         browser.close()
 
 
+def test_a_repository_with_several_papers_picks_one(page, gh):
+    main = gh.repos[STUDY]["main"]
+    second = {**sources(), "paper": "paper2", "title": "The timing cost of scattering: a joint position--time bound",
+              "draft": "paper2/draft.pdf", "facts": {}, "claims": [], "unsourced": []}
+    (main / "report" / "sources-paper2.json").write_text(json.dumps(second))
+    (main / "report" / "sources-paper.json").write_text(json.dumps({**sources(), "title": "Depth from scattering"}))
+    page.goto(f"{gh.url}?study={STUDY}#/")
+    pick = page.get_by_label("Which paper")
+    pick.wait_for(timeout=30000)
+    assert pick.locator("option").all_inner_texts() == ["paper: Depth from scattering", "paper2: The timing cost of scattering: a joint position–time bound"]
+    pick.select_option("paper2")
+    page.wait_for_url("**paper=paper2**")
+    page.get_by_text("No draft PDF of paper2 yet").wait_for(timeout=30000)
+    assert page.get_by_label("Which paper").input_value() == "paper2"
+    assert not page.errors
+
+
 def test_no_draft_yet_still_lists_the_sources(page, gh):
     del gh.repos[STUDY]["drafts"]
     page.goto(f"{gh.url}?study={STUDY}#/")

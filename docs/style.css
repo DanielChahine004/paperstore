@@ -136,12 +136,14 @@ body.paneled #pages { margin-right: var(--panel); }
 /* a study's manuscript: the draft's fact and \claim links, and their sources in the panel */
 .srclink { position: absolute; z-index: 4; border-radius: 3px; cursor: pointer; }
 .srclink.fact { background: rgba(0, 128, 128, .10); }
-.srclink.claim { background: rgba(0, 128, 128, .14); border-radius: 50%; }
+.srclink.claim { background: rgba(0, 128, 128, .14); }
 .srclink.claim.verified { background: var(--ok-soft); }
 .srclink.bad { background: var(--bad-soft); }
 .srclink:hover { background: rgba(0, 128, 128, .28); }
 .srclink.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
-.srclink.flash { animation: flash 1.4s ease-out 2; }
+.srclink.flash { animation: srcflash 1.2s ease-out 2; }
+@keyframes srcflash { 0% { box-shadow: 0 0 0 4px rgba(53, 84, 209, .45); } 100% { box-shadow: 0 0 0 0 transparent; } }
+#bar .paperpick { width: auto; max-width: 42vw; padding: 5px 8px; text-overflow: ellipsis; }
 .src { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; cursor: pointer; transition: border-color .15s; }
 .src:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .src.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); cursor: default; }

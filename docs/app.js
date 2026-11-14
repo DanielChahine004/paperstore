@@ -770,7 +770,10 @@ async function loadStudy() {
 	st.papers = (await st.src.list("report")).map((f) => /^sources-(.+)\.json$/.exec(f)?.[1]).filter(Boolean).sort();
 	if (!st.papers.length) throw new Error(`${st.repo} has no report/sources-<paper>.json yet: run step3_outputs/sources.py there and push`);
 	st.paper = st.papers.includes(params.get("paper")) ? params.get("paper") : st.papers[0];
-	st.data = JSON.parse(await st.src.text(`report/sources-${st.paper}.json`));
+	const sheets = await Promise.all(st.papers.map((p) => st.src.text(`report/sources-${p}.json`).then((t) => JSON.parse(t)).catch(() => ({ paper: p }))));
+	st.titles = Object.fromEntries(sheets.map((d, i) => [st.papers[i], d.title || ""]));
+	st.data = sheets[st.papers.indexOf(st.paper)];
+	if (!st.data.facts) throw new Error(`report/sources-${st.paper}.json could not be read`);
 	st.bySlug = Object.fromEntries(Object.entries(st.data.facts).map(([name, f]) => [f.slug, name]));
 }
 
@@ -782,10 +785,12 @@ function studyError(e) {
 }
 
 function studyPicker() {
-	const st = S.study, name = st.repo.split("/").pop();
-	if (st.papers.length < 2) return small() ? null : el("span", { class: "title", title: st.repo }, el("span", {}, st.paper), el("span", { class: "muted" }, ` — ${name}`));
-	return el("select", { "aria-label": "Manuscript", style: "width:auto", onchange: (e) => { const p = new URLSearchParams(location.search); p.set("paper", e.target.value); location.href = location.pathname + "?" + p + "#/"; } },
-		...st.papers.map((p) => el("option", { value: p, selected: p === st.paper }, `${p} — ${name}`)));
+	// each paper in the repository by its title; choosing one reloads with ?paper=, so a link names it
+	const st = S.study, name = st.repo.split("/").pop(), label = (p) => plainTitle(st.titles[p]) || p;
+	if (st.papers.length < 2) return small() ? null : el("span", { class: "title", title: `${st.repo}: ${label(st.paper)}` }, el("span", {}, st.paper), el("span", { class: "muted" }, ` — ${label(st.paper)}`));
+	return el("select", { class: "paperpick", "aria-label": "Which paper", title: `The papers in ${name}`,
+		onchange: (e) => { const p = new URLSearchParams(location.search); p.set("paper", e.target.value); location.href = location.pathname + "?" + p + "#/"; } },
+		...st.papers.map((p) => el("option", { value: p, selected: p === st.paper }, small() ? p : `${p}: ${label(p)}`)));
 }
 
 async function studyView(kind, ref) {
@@ -849,8 +854,10 @@ function drawLinks() {
 		const P = R.pages[L.page];
 		if (!P) continue;
 		const pad = L.kind === "claim" ? 0.005 : 0, [x0, y0, x1, y1] = L.rect;
-		const st = L.kind === "claim" ? claimState(L.ref, S.study.data.claims[useOf(L.ref)]) : null;
-		P.div.append(el("a", { class: `srclink ${L.kind}${st?.problem ? " bad" : st?.n?.status === "verified" ? " verified" : ""}${linkOn(L) ? " sel" : ""}`,
+		// a claim's one mark stands for every annotation it names: red if any fails, green when all are verified
+		const u = L.kind === "claim" ? S.study.data.claims[useOf(L.ref)] : null, sts = u ? u.refs.map((r) => claimState(r, u)) : L.kind === "claim" ? [claimState(L.ref)] : [];
+		const look = sts.some((x) => x.problem) ? " bad" : sts.length && sts.every((x) => x.n?.status === "verified") ? " verified" : "";
+		P.div.append(el("a", { class: `srclink ${L.kind}${look}${linkOn(L) ? " sel" : ""}`,
 			"data-kind": L.kind, "data-ref": typeof L.ref === "string" ? L.ref : "",
 			title: L.kind === "fact" ? `${L.ref}: where it comes from` : L.kind === "claim" ? `${L.ref}: the passage it rests on` : L.kind === "link" ? L.ref : null,
 			href: L.kind === "link" ? L.ref : null, target: L.kind === "link" ? "_blank" : null, rel: L.kind === "link" ? "noopener" : null,
@@ -885,6 +892,8 @@ function pick(kind, ref, scroll) {   // a fact or a claim, in the panel and in t
 	const hash = kind === "fact" ? `#/fact/${encodeURIComponent(ref)}` : `#/claim/${ref}`;
 	if (location.hash !== hash) history.replaceState(null, "", hash);
 }
+
+const plainTitle = (t) => (t || "").replace(/---/g, "—").replace(/--/g, "–").replace(/\\[A-Za-z]+\*?/g, "").replace(/[{}$]/g, "").replace(/\s+/g, " ").trim();
 
 // a sentence of LaTeX as plain text: facts filled in, citations as [Key]
 const texText = (s) => s
