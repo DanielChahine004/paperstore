@@ -839,17 +839,75 @@ async function scanLinks() {   // every link in the draft: a fact, a claim, a pl
 			if (f && st.bySlug[decodeURIComponent(f[1])]) out.push({ page: n, rect, kind: "fact", ref: st.bySlug[decodeURIComponent(f[1])] });
 			else if (c) out.push({ page: n, rect, kind: "claim", ref: `${decodeURIComponent(c[1])}/${decodeURIComponent(c[2])}` });
 			else if (a.url) out.push({ page: n, rect, kind: "link", ref: a.url });
-			else if (a.dest) out.push({ page: n, rect, kind: "dest", ref: a.dest });
+			else if (a.dest) out.push({ page: n, rect, kind: "dest", ref: a.dest, pdf: a.rect });
+			if (c) out.at(-1).pdf = a.rect;
+		}
+		const claims = out.filter((L) => L.page === n && L.kind === "claim");
+		if (claims.length) {   // each claim's sentence, highlighted in the text as the paper store highlights a quote
+			const text = pageStream(await page.getTextContent());
+			for (const L of claims) L.lines = sentenceLines(text, L, vp);
 		}
 	}
 	return out;
+}
+
+// the page's text as lowercase letters and digits, each knowing which character of which text item
+// it came from: so a sentence is found whatever the PDF did to its spaces, hyphens and ligatures
+function pageStream(tc) {
+	const chars = [], at = [];
+	tc.items.forEach((it, i) => {
+		for (let k = 0; k < (it.str || "").length; k++)
+			for (const ch of it.str[k].normalize("NFKD").toLowerCase().replace(/[^a-z0-9]/g, "")) { chars.push(ch); at.push([i, k]); }
+	});
+	return { text: chars.join(""), at, items: tc.items };
+}
+
+// a claim's sentence as the PDF prints its words: facts filled in; math, citations and references
+// cut out (the PDF prints them differently), leaving the runs of plain words to look for
+function proseRuns(u) {
+	const s = u.sentence.replace(/\\fact\{([^}]*)\}/g, (_, n) => S.study.data.facts[n]?.value ?? "")
+		.replace(/\$[^$]*\$/g, "|").replace(/\\(?:claim\*?|cite[a-z]*\*?|ref|eqref|autoref|cref|Cref)(?:\[[^\]]*\])*\{[^}]*\}/g, "|")
+		.replace(/\\[A-Za-z]+/g, " ").replace(/\\./g, " ");
+	return s.split("|").map((x) => x.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]/g, "")).filter((x) => x.length >= 8);
+}
+
+function sentenceLines(T, L, vp) {
+	const u = S.study.data.claims[useOf(L.ref)];
+	const runs = u ? proseRuns(u) : [];
+	if (!runs.length) return null;
+	// where the mark is in the text: after the last character left of it on its line
+	const [mx, my0, , my1] = L.pdf, charX = (j) => { const [i, k] = T.at[j], it = T.items[i]; return it.transform[4] + it.width * k / it.str.length; };
+	let m = -1;
+	for (let j = 0; j < T.at.length; j++) {
+		const it = T.items[T.at[j][0]], y = it.transform[5];
+		if (y > my0 - 12 && y < my1 + 4 && charX(j) < mx + 1) m = j;
+	}
+	if (m < 0) return null;
+	let head = runs[0].slice(0, 30), start = T.text.lastIndexOf(head, m);
+	if (start < 0) { head = runs[0].slice(0, 14); start = T.text.lastIndexOf(head, m); }
+	if (start < 0 || m - start > 1500) return null;   // begins on the page before, or not found: the mark alone
+	const tail = runs.at(-1).slice(-24), t = T.text.indexOf(tail, start);
+	const end = t >= 0 && t - start < 2000 ? Math.max(t + tail.length, m + 1) : m + 1;
+	// one box per text item touched, merged into one per line
+	const spans = new Map();
+	for (let j = start; j < end; j++) { const [i, k] = T.at[j], s = spans.get(i); if (s) { s[0] = Math.min(s[0], k); s[1] = Math.max(s[1], k); } else spans.set(i, [k, k]); }
+	const lines = [];
+	for (const [i, [a, b]] of spans) {
+		const it = T.items[i], [, , c, d, x, y] = it.transform, fs = Math.hypot(c, d) || it.height || 10, w = it.width / it.str.length;
+		const [X0, Y0, X1, Y1] = vp.convertToViewportRectangle([x + w * a, y - 0.22 * fs, x + w * (b + 1), y + 0.82 * fs]);
+		const r = [Math.min(X0, X1) / vp.width, Math.min(Y0, Y1) / vp.height, Math.max(X0, X1) / vp.width, Math.max(Y0, Y1) / vp.height];
+		const same = lines.find((l) => Math.abs((l[1] + l[3]) / 2 - (r[1] + r[3]) / 2) < (r[3] - r[1]) / 2);
+		if (same) { same[0] = Math.min(same[0], r[0]); same[2] = Math.max(same[2], r[2]); same[1] = Math.min(same[1], r[1]); same[3] = Math.max(same[3], r[3]); }
+		else lines.push(r);
+	}
+	return lines;
 }
 
 const useOf = (ref) => S.study.data.claims.findIndex((u) => u.refs.includes(ref));
 const linkOn = (L) => R.sel && L.kind === R.sel.kind && (L.kind === "fact" ? L.ref === R.sel.ref : S.study.data.claims[R.sel.use]?.refs.includes(L.ref));
 
 function drawLinks() {
-	$$(".srclink").forEach((h) => h.remove());
+	$$(".srclink, .srchl").forEach((h) => h.remove());
 	for (const L of R.links) {
 		const P = R.pages[L.page];
 		if (!P) continue;
@@ -857,6 +915,9 @@ function drawLinks() {
 		// a claim's one mark stands for every annotation it names: red if any fails, green when all are verified
 		const u = L.kind === "claim" ? S.study.data.claims[useOf(L.ref)] : null, sts = u ? u.refs.map((r) => claimState(r, u)) : L.kind === "claim" ? [claimState(L.ref)] : [];
 		const look = sts.some((x) => x.problem) ? " bad" : sts.length && sts.every((x) => x.n?.status === "verified") ? " verified" : "";
+		for (const [a, b, c, d] of L.lines || [])   // the sentence itself, highlighted
+			P.div.append(el("div", { class: `srchl${look}${linkOn(L) ? " sel" : ""}`, "data-kind": "claim", "data-ref": L.ref, title: `${L.ref}: the passage it rests on`,
+				style: `left:${a * 100}%;top:${b * 100}%;width:${(c - a) * 100}%;height:${(d - b) * 100}%`, onclick: () => pick("claim", L.ref, false) }));
 		P.div.append(el("a", { class: `srclink ${L.kind}${look}${linkOn(L) ? " sel" : ""}`,
 			"data-kind": L.kind, "data-ref": typeof L.ref === "string" ? L.ref : "",
 			title: L.kind === "fact" ? `${L.ref}: where it comes from` : L.kind === "claim" ? `${L.ref}: the passage it rests on` : L.kind === "link" ? L.ref : null,
@@ -881,14 +942,14 @@ function pick(kind, ref, scroll) {   // a fact or a claim, in the panel and in t
 	R.tab = kind === "fact" ? "facts" : "claims";
 	if (!R.panel) togglePanel(true);
 	drawStudyPanel();
-	$$(".srclink").forEach((h) => h.classList.toggle("sel", linkOn({ kind: h.dataset.kind, ref: h.dataset.ref })));
+	$$(".srclink, .srchl").forEach((h) => h.classList.toggle("sel", linkOn({ kind: h.dataset.kind, ref: h.dataset.ref })));
 	$("#panel .src.sel")?.scrollIntoView({ block: "nearest" });
 	const L = R.links.find((x) => linkOn(x));
 	if (scroll && L && R.pages[L.page]) {
-		const P = R.pages[L.page];
-		scrollTo({ top: Math.max(0, P.div.offsetTop + L.rect[1] * P.h - (small() ? 90 : innerHeight / 3)), behavior: "smooth" });
+		const P = R.pages[L.page], top = L.lines?.[0]?.[1] ?? L.rect[1];
+		scrollTo({ top: Math.max(0, P.div.offsetTop + top * P.h - (small() ? 90 : innerHeight / 3)), behavior: "smooth" });
 	}
-	setTimeout(() => $$(".srclink.sel").forEach((h) => { h.classList.remove("flash"); void h.offsetWidth; h.classList.add("flash"); }), scroll ? 350 : 0);
+	setTimeout(() => $$(".srclink.sel, .srchl.sel").forEach((h) => { h.classList.remove("flash"); void h.offsetWidth; h.classList.add("flash"); }), scroll ? 350 : 0);
 	const hash = kind === "fact" ? `#/fact/${encodeURIComponent(ref)}` : `#/claim/${ref}`;
 	if (location.hash !== hash) history.replaceState(null, "", hash);
 }

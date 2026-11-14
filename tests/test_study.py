@@ -119,6 +119,9 @@ def test_claims_are_checked_against_the_store_as_it_is(page, gh):
     page.locator(".srclink.claim").first.wait_for(timeout=30000)
     assert page.locator(".srclink.claim.verified").count() == 1
     assert page.locator(".srclink.claim.bad").count() == 1, "99 in the sentence, 106.8 in the paper"
+    assert page.locator(".srchl.verified").count() == 1 and page.locator(".srchl.bad").count() == 1, "each claimed sentence highlighted in the text"
+    box = page.locator(".srchl.verified").bounding_box()
+    assert box["width"] > 150, "the whole sentence, not just the mark"
     page.locator(".srclink.claim.verified").click()
     card = page.locator("#panel .src.claimuse.sel")
     assert "The sensitivity of design A" in card.inner_text()
