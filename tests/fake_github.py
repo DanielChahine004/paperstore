@@ -11,13 +11,14 @@ Accept header (as a phone's did) is the default here. That is the case that brok
 import base64
 import hashlib
 import json
+import re
 import shutil
 import sys
 import tempfile
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 REPO = "test/store"
@@ -35,6 +36,8 @@ class FakeGitHub:
         self.push = True    # False: a read-only collaborator
         self.conflicts = 0  # this many PUTs answer 409, as if someone else saved first
         self.signed_out = False   # every API call answers 401
+        self.repos = {}     # other readable repositories: {"owner/name": {branch: folder}}
+        self.reads = []     # (repo, ref, path) read from those
         self.lock = threading.Lock()
         fake = self
 
@@ -72,13 +75,25 @@ class FakeGitHub:
                     return self.send(401, {"message": "Requires authentication"})
                 if p == "/user":
                     return self.send(200, {"login": "tester"})
-                if p == f"/repos/{REPO}":
+                m = re.fullmatch(r"/repos/([^/]+/[^/]+)(?:/contents/(.*))?", p)
+                repo = m and m.group(1)
+                if repo == REPO and m.group(2) is None:
                     return self.send(200, {"full_name": REPO, "permissions": {"push": fake.push, "admin": False}})
-                prefix = f"/repos/{REPO}/contents/"
-                if not p.startswith(prefix):
+                if repo in fake.repos and m.group(2) is None:
+                    return self.send(200, {"full_name": repo, "permissions": {"push": False, "admin": False}})
+                if not m or m.group(2) is None:
                     return self.send(404, {"message": "Not Found"})
-                rel = unquote(p[len(prefix):])
-                f = fake.store / rel
+                rel = unquote(m.group(2))
+                if repo == REPO:
+                    root = fake.store
+                else:   # another repository: a folder per branch, a commit's ref reading the main one
+                    ref = (parse_qs(urlsplit(self.path).query).get("ref") or ["main"])[0]
+                    branches = fake.repos.get(repo, {})
+                    root = branches.get(ref) or (branches.get("main") if re.fullmatch(r"[0-9a-f]{7,40}", ref) else None)
+                    if root is None:
+                        return self.send(404, {"message": "Not Found"})
+                    fake.reads.append((repo, ref, rel))
+                f = Path(root) / rel
                 if f.is_dir():
                     return self.send(200, [{"name": c.name, "path": f"{rel}/{c.name}", "type": "dir" if c.is_dir() else "file"} for c in sorted(f.iterdir())])
                 if not f.is_file():

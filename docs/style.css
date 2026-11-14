@@ -133,6 +133,45 @@ body.paneled #pages { margin-right: var(--panel); }
 .hl.area { background: var(--area); outline: 2px solid var(--accent); mix-blend-mode: normal; }
 .hl.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
 .hl.flash { animation: flash 1.4s ease-out 2; }
+/* a study's manuscript: the draft's fact and \claim links, and their sources in the panel */
+.srclink { position: absolute; z-index: 4; border-radius: 3px; cursor: pointer; }
+.srclink.fact { background: rgba(0, 128, 128, .10); }
+.srclink.claim { background: rgba(0, 128, 128, .14); border-radius: 50%; }
+.srclink.claim.verified { background: var(--ok-soft); }
+.srclink.bad { background: var(--bad-soft); }
+.srclink:hover { background: rgba(0, 128, 128, .28); }
+.srclink.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.srclink.flash { animation: flash 1.4s ease-out 2; }
+.src { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; cursor: pointer; transition: border-color .15s; }
+.src:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.src.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); cursor: default; }
+.src .head { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); min-width: 0; }
+.src .head .grow { flex: 1; }
+.src .head a { display: inline-flex; align-items: center; gap: 3px; }
+.src .head .icon { width: 13px; height: 13px; }
+.src .name { font-size: 14px; font-weight: 600; color: var(--ink); }
+.src .val { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--sunk); color: var(--ink); padding: 1px 7px; border-radius: 6px; }
+.src .where, .src .file { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; margin-top: 3px; }
+.src .lbl { font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); margin-top: 12px; }
+.src .sentence { font-family: "Source Serif 4", Charter, Georgia, serif; font-size: 15px; line-height: 1.45; margin: 6px 0 2px; }
+.src .ref { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
+.src .ref .head b { color: var(--ink); font-weight: 600; }
+.src .ref blockquote { margin: 6px 0 0; font-family: "Source Serif 4", Charter, Georgia, serif; font-size: 14px; line-height: 1.45; border-left: 3px solid var(--quote-bar); padding-left: 8px; font-style: italic; }
+.src .ref blockquote:not(.area)::before { content: "\201C"; } .src .ref blockquote:not(.area)::after { content: "\201D"; }
+.src .ref .note { margin-top: 6px; font-size: 13px; white-space: pre-wrap; color: var(--muted); }
+.src .problem { color: var(--bad); font-size: 13px; margin-top: 4px; }
+.src .ok { color: var(--ok); font-size: 13px; margin-top: 4px; }
+.btn.mini { padding: 0 7px; margin-left: 6px; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; }
+pre.peek { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--sunk); border-radius: 8px; padding: 6px 0; margin: 4px 0 0; max-height: 340px; overflow: auto; cursor: text; }
+pre.peek .ln { display: block; padding: 0 10px 0 0; white-space: pre; }
+pre.peek .ln i { display: inline-block; width: 3.6em; padding-right: .8em; text-align: right; color: var(--faint); font-style: normal; user-select: none; }
+pre.peek .ln.mark { background: var(--hl); }
+pre.peek .ln.more { color: var(--muted); padding-left: 1em; }
+.checks h3 { font-size: 13px; font-weight: 650; margin: 4px 0 6px; }
+.checks h3 + p, .checks > p { font-size: 13px; margin: 0 0 10px; }
+.checks ul { margin: 0 0 16px; padding-left: 18px; font-size: 13px; display: grid; gap: 6px; overflow-wrap: anywhere; }
+.checks ul.bad li { color: var(--bad); }
+.checks li.go { cursor: pointer; text-decoration: underline dotted; }
 @keyframes flash { 0% { box-shadow: 0 0 0 8px rgba(53, 84, 209, .45); } 100% { box-shadow: 0 0 0 0 transparent; } }
 body.boxing .page { cursor: crosshair; touch-action: none; }
 body.boxing .textLayer { pointer-events: none; }

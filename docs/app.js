@@ -120,9 +120,9 @@ class GitHubSource {
 		this.isAdmin = !!perms.admin;    // who may manage access, on GitHub's own page
 		return login;
 	}
-	raw(path) { return this.req(`contents/${encodeURI(path)}?ref=${this.branch}`, { cache: "no-cache", headers: { Accept: "application/vnd.github.raw" } }); }   // revalidated, so a reload shows the latest save
-	async text(path) { const r = await this.raw(path); if (r.status === 404) return null; if (!r.ok) throw new Error(`${path}: GitHub said ${r.status}`); return r.text(); }
-	async bytes(path) { const r = await this.raw(path); if (!r.ok) throw new Error(`${path}: GitHub said ${r.status}`); return r.arrayBuffer(); }
+	raw(path, ref = this.branch) { return this.req(`contents/${encodeURI(path)}?ref=${ref}`, { cache: "no-cache", headers: { Accept: "application/vnd.github.raw" } }); }   // revalidated, so a reload shows the latest save
+	async text(path, ref) { const r = await this.raw(path, ref); if (r.status === 404) return null; if (!r.ok) throw new Error(`${path}: GitHub said ${r.status}`); return r.text(); }
+	async bytes(path, ref) { const r = await this.raw(path, ref); if (!r.ok) throw Object.assign(new Error(`${path}: GitHub said ${r.status}`), { status: r.status }); return r.arrayBuffer(); }
 	async blob(path) { const r = await this.raw(path); return r.ok ? r.blob() : null; }
 	async list(dir) { const r = await this.req(`contents/${dir}?ref=${this.branch}`); return r.ok ? (await r.json()).map((f) => f.name) : []; }
 	async update(path, change, message) {   // read-modify-write on the file's sha; retried if someone saved in between
@@ -223,8 +223,9 @@ const thumbObserver = new IntersectionObserver((es) => es.forEach(async (e) => {
 function bar(kind, extra = []) {
 	const tab = (href, label, on) => el("a", { class: "tab" + (on ? " on" : ""), href }, label);
 	$("#bar").replaceChildren(...[
-		kind === "reader" ? btn("back", "Back to the library", () => (location.hash = S.back || "#/")) : el("a", { class: "brand", href: "#/" }, icon("book"), el("span", { class: "hide-sm" }, "Paper Store")),
-		kind === "reader" ? null : tab("#/", "Library", kind === "library"),
+		kind === "reader" ? btn("back", S.back === "#/" && S.study ? "Back to the manuscript" : "Back to the library", () => (location.hash = S.back || "#/")) : el("a", { class: "brand", href: "#/" }, icon("book"), el("span", { class: "hide-sm" }, "Paper Store")),
+		kind === "reader" || !S.study ? null : tab("#/", small() ? "Paper" : "Manuscript", kind === "study"),
+		kind === "reader" ? null : tab(S.study ? "#/library" : "#/", "Library", kind === "library"),
 		kind === "reader" ? null : tab("#/claims", "Claims", kind === "claims"),
 		...extra,
 		kind === "reader" ? null : el("span", { class: "grow" }),
@@ -288,7 +289,7 @@ const F = JSON.parse(sessionStorage.getItem("ps.filters") || "null") || { q: "",
 const saveF = () => sessionStorage.setItem("ps.filters", JSON.stringify(F));
 
 function libraryView() {
-	S.back = "#/";
+	S.back = S.study ? "#/library" : "#/";
 	bar("library");
 	setPanel(false);
 	const years = [...new Set(S.papers.map((p) => p.year).filter(Boolean))].sort();
@@ -478,15 +479,15 @@ function readerBar() {
 	find.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.shiftKey ? stepFind(-1) : (find.value !== R.find.q ? runFind(find.value) : stepFind(1)); } if (e.key === "Escape") clearFind(); });
 	const findbox = el("span", { class: "findbox", hidden: small() || null }, find, findN, btn("up", "Previous match", () => stepFind(-1)), btn("down", "Next match", () => stepFind(1)));
 	const p = R.paper;
-	bar("reader", [
-		el("span", { class: "title", title: p.title }, el("span", {}, `${byline(p)} ${p.year || ""}`), el("span", { class: "muted hide-sm" }, ` — ${p.title}`)),
+	bar(R.study ? "study" : "reader", [
+		R.study ? studyPicker() : el("span", { class: "title", title: p.title }, el("span", {}, `${byline(p)} ${p.year || ""}`), el("span", { class: "muted hide-sm" }, ` — ${p.title}`)),
 		el("span", { class: "pageno hide-sm" }, page, el("span", { class: "of" }, "/ …")),
 		findbox,
 		small() ? btn("search", "Find in paper", () => { findbox.hidden = !findbox.hidden; if (!findbox.hidden) find.focus(); }) : null,
 		btn("minus", "Zoom out", () => zoom(1 / 1.15), { cls: "hide-sm" }), btn("plus", "Zoom in", () => zoom(1.15), { cls: "hide-sm" }),
-		R.boxBtn = S.src.canEdit ? btn("box", "Box a figure or table (B)", () => setBoxing(!S.boxing), { label: small() ? null : "Box" }) : null,
-		R.panelBtn = btn("panel", "Claims and details", () => togglePanel(), { cls: R.panel ? "on" : "" }),
-	]);
+		R.boxBtn = S.src.canEdit && !R.study ? btn("box", "Box a figure or table (B)", () => setBoxing(!S.boxing), { label: small() ? null : "Box" }) : null,
+		R.panelBtn = btn("panel", R.study ? "Facts, claims and checks" : "Claims and details", () => togglePanel(), { cls: R.panel ? "on" : "" }),
+	].filter(Boolean));
 }
 
 function togglePanel(on = !R.panel) {
@@ -496,6 +497,7 @@ function togglePanel(on = !R.panel) {
 	if (!small()) relayout();
 }
 async function relayout() {
+	if (!R?.doc) return;
 	const keep = R.pages.length ? currentPage() : 1;
 	await layout();
 	goPage(keep, false);
@@ -517,10 +519,10 @@ async function layout() {
 		box.append(div);
 		R.pages[n] = { div, w: vp.width, h: vp.height, done: false };
 		R.observer.observe(div);
-		boxDrawing(div, n);
+		if (!R.study) boxDrawing(div, n);
 	}
 	$(".pageno .of")?.replaceChildren(`/ ${R.doc.numPages}`);
-	drawHighlights();
+	if (R.study) drawLinks(); else drawHighlights();
 }
 
 async function renderPage(n) {
@@ -582,6 +584,7 @@ function refreshReader(selId) {
 
 function drawPanel() {
 	if (!R) return;
+	if (R.study) return drawStudyPanel();
 	const p = R.paper, notes = (S.notes[R.key] || []).slice().sort((a, b) => a.page - b.page || (a.rects?.[0]?.[1] || 0) - (b.rects?.[0]?.[1] || 0));
 	const tab = (id, label) => el("button", { class: "ptab" + (R.tab === id ? " on" : ""), onclick: () => { R.tab = id; drawPanel(); } }, label);
 	let body;
@@ -670,7 +673,7 @@ function placePop() {
 	const t = selectionTarget(), pop = $("#pop");
 	if (!t) { pop.hidden = true; return; }
 	pop.replaceChildren(
-		S.src.canEdit ? el("button", { class: "btn", onpointerdown: (e) => e.preventDefault(), onclick: () => { const t2 = selectionTarget(); if (t2) compose(t2); } }, icon("quote"), "Claim") : "",
+		S.src.canEdit && !R.study ? el("button", { class: "btn", onpointerdown: (e) => e.preventDefault(), onclick: () => { const t2 = selectionTarget(); if (t2) compose(t2); } }, icon("quote"), "Claim") : "",
 		el("button", { class: "btn", onpointerdown: (e) => e.preventDefault(), onclick: async () => { try { await navigator.clipboard.writeText(t.text); toast("Copied"); } catch {} pop.hidden = true; } }, icon("copy"), "Copy"));
 	pop.hidden = false;
 	const w = pop.offsetWidth, below = t.at.bottom + 10, above = t.at.top - pop.offsetHeight - 10;
@@ -751,14 +754,269 @@ async function zoom(f) {
 	await relayout();
 }
 
+// ---- a study's manuscript (?study=owner/repo) ----------------------------------------------
+// A repository laid out like the study template: step3_outputs/sources.py writes
+// report/sources-<paper>.json (every \fact with the code and the files behind it, every
+// \claim with the annotations it names), and its CI publishes the draft PDF, in which each
+// fact and claim is a link, to the `drafts` branch. This shows that PDF with every link
+// opening its source in the panel, and checks each claim against this store as it is now.
+
+const INSTALL = CFG.install || "https://github.com/apps/paperstore-daniel/installations/new";   // where the app is given more repositories
+
+async function loadStudy() {
+	const st = S.study;
+	const r = await st.src.req("");
+	if (!r.ok) throw Object.assign(new Error(`${S.me} cannot open ${st.repo}` + (r.status === 404 ? "" : ` (GitHub said ${r.status})`)), { install: r.status === 404 });
+	st.papers = (await st.src.list("report")).map((f) => /^sources-(.+)\.json$/.exec(f)?.[1]).filter(Boolean).sort();
+	if (!st.papers.length) throw new Error(`${st.repo} has no report/sources-<paper>.json yet: run step3_outputs/sources.py there and push`);
+	st.paper = st.papers.includes(params.get("paper")) ? params.get("paper") : st.papers[0];
+	st.data = JSON.parse(await st.src.text(`report/sources-${st.paper}.json`));
+	st.bySlug = Object.fromEntries(Object.entries(st.data.facts).map(([name, f]) => [f.slug, name]));
+}
+
+function studyError(e) {
+	$("#main").replaceChildren(el("div", { class: "wrap" }, el("p", {}, "Could not open the study: " + e.message + "."),
+		e.install ? el("p", { class: "muted" }, "If you can open it on GitHub, the Paper Store app is not allowed to read it yet: ",
+			el("a", { href: INSTALL, target: "_blank", rel: "noopener" }, "add the repository to the app"), ", then reload.") : null,
+		el("a", { href: "#/library" }, "Open the library instead")));
+}
+
+function studyPicker() {
+	const st = S.study, name = st.repo.split("/").pop();
+	if (st.papers.length < 2) return small() ? null : el("span", { class: "title", title: st.repo }, el("span", {}, st.paper), el("span", { class: "muted" }, ` — ${name}`));
+	return el("select", { "aria-label": "Manuscript", style: "width:auto", onchange: (e) => { const p = new URLSearchParams(location.search); p.set("paper", e.target.value); location.href = location.pathname + "?" + p + "#/"; } },
+		...st.papers.map((p) => el("option", { value: p, selected: p === st.paper }, `${p} — ${name}`)));
+}
+
+async function studyView(kind, ref) {
+	S.back = "#/";
+	const st = S.study;
+	if (!st.data) {
+		bar("study");
+		setPanel(false);
+		$("#main").replaceChildren(el("div", { class: "wrap muted" }, `Opening ${st.repo}…`));
+		try { await Promise.all([loadStudy(), S.loading]); } catch (e) { return studyError(e); }
+	}
+	if (S.studyR) {   // back from a paper: the same draft, where it was
+		if (R !== S.studyR) { R = S.studyR; readerBar(); setPanel(R.panel); if (R.doc) { await layout(); scrollTo(0, R.y || 0); } drawPanel(); }
+	} else {
+		R = S.studyR = { study: true, key: "", paper: {}, tab: "facts", panel: !small() || !!kind, pages: [], links: [] };
+		readerBar();
+		setPanel(R.panel);
+		drawPanel();
+		$("#main").replaceChildren(el("div", { class: "wrap muted" }, `Opening the draft of ${st.paper}…`));
+		try { R.doc = await pdfjs.getDocument({ data: await st.drafts.bytes(st.data.draft) }).promise; }
+		catch (e) {
+			if (R !== S.studyR) return;
+			$("#main").replaceChildren(el("div", { class: "wrap" },
+				el("p", {}, e.status === 404 ? `No draft PDF of ${st.paper} yet: ${st.data.draft} is not on the repository's drafts branch.` : "Could not open the draft: " + e.message),
+				el("p", { class: "muted" }, "The study's CI builds the draft (every \\fact and \\claim marked and linked) on each push to main and publishes it there. Until then its facts, claims and checks are in the panel.",
+					small() ? [" ", el("button", { class: "btn", onclick: () => togglePanel(true) }, "Open the panel")] : null)));
+			return;
+		}
+		R.links = await scanLinks();
+		if (R !== S.studyR) return;
+		await layout();
+		drawPanel();
+	}
+	if (kind) pick(kind, ref, true);
+}
+
+async function scanLinks() {   // every link in the draft: a fact, a claim, a place in the paper, or a web address
+	const out = [], st = S.study;
+	for (let n = 1; n <= R.doc.numPages; n++) {
+		const page = await R.doc.getPage(n), vp = page.getViewport({ scale: 1 });
+		for (const a of await page.getAnnotations()) {
+			if (a.subtype !== "Link") continue;
+			const [x0, y0, x1, y1] = vp.convertToViewportRectangle(a.rect);
+			const rect = [Math.min(x0, x1) / vp.width, Math.min(y0, y1) / vp.height, Math.max(x0, x1) / vp.width, Math.max(y0, y1) / vp.height];
+			const f = a.url && /\/report\/sources-[^#]*\.md#(.+)$/.exec(a.url), c = a.url && /#\/([^/#?]+)\/([^/#?]+)$/.exec(a.url);
+			if (f && st.bySlug[decodeURIComponent(f[1])]) out.push({ page: n, rect, kind: "fact", ref: st.bySlug[decodeURIComponent(f[1])] });
+			else if (c) out.push({ page: n, rect, kind: "claim", ref: `${decodeURIComponent(c[1])}/${decodeURIComponent(c[2])}` });
+			else if (a.url) out.push({ page: n, rect, kind: "link", ref: a.url });
+			else if (a.dest) out.push({ page: n, rect, kind: "dest", ref: a.dest });
+		}
+	}
+	return out;
+}
+
+const useOf = (ref) => S.study.data.claims.findIndex((u) => u.refs.includes(ref));
+const linkOn = (L) => R.sel && L.kind === R.sel.kind && (L.kind === "fact" ? L.ref === R.sel.ref : S.study.data.claims[R.sel.use]?.refs.includes(L.ref));
+
+function drawLinks() {
+	$$(".srclink").forEach((h) => h.remove());
+	for (const L of R.links) {
+		const P = R.pages[L.page];
+		if (!P) continue;
+		const pad = L.kind === "claim" ? 0.005 : 0, [x0, y0, x1, y1] = L.rect;
+		const st = L.kind === "claim" ? claimState(L.ref, S.study.data.claims[useOf(L.ref)]) : null;
+		P.div.append(el("a", { class: `srclink ${L.kind}${st?.problem ? " bad" : st?.n?.status === "verified" ? " verified" : ""}${linkOn(L) ? " sel" : ""}`,
+			"data-kind": L.kind, "data-ref": typeof L.ref === "string" ? L.ref : "",
+			title: L.kind === "fact" ? `${L.ref}: where it comes from` : L.kind === "claim" ? `${L.ref}: the passage it rests on` : L.kind === "link" ? L.ref : null,
+			href: L.kind === "link" ? L.ref : null, target: L.kind === "link" ? "_blank" : null, rel: L.kind === "link" ? "noopener" : null,
+			style: `left:${(x0 - pad) * 100}%;top:${(y0 - pad) * 100}%;width:${(x1 - x0 + 2 * pad) * 100}%;height:${(y1 - y0 + 2 * pad) * 100}%`,
+			onclick: (e) => { if (L.kind === "link") return; e.preventDefault(); if (L.kind === "dest") goDest(L.ref); else pick(L.kind, L.ref, false); } }));
+	}
+}
+
+async function goDest(dest) {   // a \ref or a citation: the place in this PDF it points to
+	const d = typeof dest === "string" ? await R.doc.getDestination(dest) : dest;
+	if (!d) return;
+	const n = (await R.doc.getPageIndex(d[0])) + 1, P = R.pages[n];
+	if (!P) return;
+	let y = 0;
+	if (d[1]?.name === "XYZ" && d[3] != null) y = (await R.doc.getPage(n)).getViewport({ scale: R.scale }).convertToViewportPoint(0, d[3])[1];
+	scrollTo({ top: P.div.offsetTop + y - 80, behavior: "smooth" });
+}
+
+function pick(kind, ref, scroll) {   // a fact or a claim, in the panel and in the PDF
+	R.sel = kind === "fact" ? { kind, ref } : { kind, ref, use: useOf(ref) };
+	R.tab = kind === "fact" ? "facts" : "claims";
+	if (!R.panel) togglePanel(true);
+	drawStudyPanel();
+	$$(".srclink").forEach((h) => h.classList.toggle("sel", linkOn({ kind: h.dataset.kind, ref: h.dataset.ref })));
+	$("#panel .src.sel")?.scrollIntoView({ block: "nearest" });
+	const L = R.links.find((x) => linkOn(x));
+	if (scroll && L && R.pages[L.page]) {
+		const P = R.pages[L.page];
+		scrollTo({ top: Math.max(0, P.div.offsetTop + L.rect[1] * P.h - (small() ? 90 : innerHeight / 3)), behavior: "smooth" });
+	}
+	setTimeout(() => $$(".srclink.sel").forEach((h) => { h.classList.remove("flash"); void h.offsetWidth; h.classList.add("flash"); }), scroll ? 350 : 0);
+	const hash = kind === "fact" ? `#/fact/${encodeURIComponent(ref)}` : `#/claim/${ref}`;
+	if (location.hash !== hash) history.replaceState(null, "", hash);
+}
+
+// a sentence of LaTeX as plain text: facts filled in, citations as [Key]
+const texText = (s) => s
+	.replace(/\\fact\{([^}]*)\}/g, (_, n) => (S.study.data.facts[n] ? texText(S.study.data.facts[n].value) : `[${n}?]`))
+	.replace(/\\claim\*?\{[^}]*\}/g, "")
+	.replace(/\\cite[a-z]*\*?(?:\[[^\]]*\])*\{([^}]*)\}/g, (_, k) => `[${k.replace(/\s*,\s*/g, ", ")}]`)
+	.replace(/\\(?:ref|eqref|autoref|cref|Cref)\{[^}]*\}/g, "#")
+	.replace(/\\(?:,|;|:|!|\s)/g, " ").replace(/~/g, " ").replace(/\\times(?![A-Za-z])/g, "×").replace(/\\pm(?![A-Za-z])/g, "±").replace(/\\(?:approx|sim)(?![A-Za-z])/g, "≈")
+	.replace(/\\(?:le|leq)(?![A-Za-z])/g, "≤").replace(/\\(?:ge|geq)(?![A-Za-z])/g, "≥").replace(/\\%/g, "%").replace(/---/g, "—").replace(/--/g, "–")
+	.replace(/\\[A-Za-z]+\*?/g, "").replace(/[{}$]/g, "").replace(/\s+/g, " ").trim();
+
+function claimState(ref, u) {   // the annotation a \claim names, as the store has it now, and whether it holds
+	const [key, id] = ref.split("/"), out = { key, id, n: (S.notes[key] || []).find((x) => x.id === id) };
+	if (!S.byKey[key]) out.problem = `${key} is not in ${S.src.repo}`;
+	else if (!out.n) out.problem = "no such annotation";
+	else if (out.n.status === "disputed") out.problem = "the annotation is marked disputed";
+	else if (out.n.value != null && u) {
+		const v = Number(typeof out.n.value === "object" ? out.n.value.number : out.n.value), unit = out.n.value.unit ? " " + out.n.value.unit : "";
+		if (!Number.isNaN(v) && u.said.length) {
+			if (u.said.some((x) => Math.abs(x - v) <= 1e-9 * Math.max(1, Math.abs(v)))) out.ok = `the sentence states ${v}${unit}, as the paper does`;
+			else out.problem = `the paper says ${v}${unit}, the sentence says ${u.said.join(", ")}`;
+		}
+	}
+	return out;
+}
+
+function studyChecks() {
+	const d = S.study.data, problems = d.problems.map((text) => ({ text }));
+	let unchecked = 0;
+	d.claims.forEach((u, i) => u.refs.forEach((ref) => {
+		const r = claimState(ref, u);
+		if (r.problem) problems.push({ text: `${u.file}:${u.line}: \\claim{${ref}}: ${r.problem}`, ref });
+		else if ((r.n.status || "unchecked") === "unchecked") unchecked++;
+	}));
+	return { problems, unchecked };
+}
+
+const ghUrl = (at) => `${S.study.data.repo}/blob/${at.commit || "main"}/${at.path}${at.line ? "#L" + at.line : ""}`;
+const ghLine = (fileLine) => { const [path, line] = fileLine.split(":"); return el("a", { href: ghUrl({ path, line }), target: "_blank", rel: "noopener" }, fileLine); };
+
+const peeked = {};
+async function peek(at, pre, code) {   // a file as it was at the commit that made the number: the function, or the lines around a constant, or the file
+	pre.dataset.loaded = "1";
+	pre.textContent = "Loading…";
+	const id = `${at.commit || "main"}:${at.path}`;
+	try {
+		peeked[id] ??= S.study.src.raw(at.path, at.commit || "main").then(async (r) => { if (!r.ok) throw new Error(`GitHub said ${r.status}`); return new Uint8Array(await r.arrayBuffer()); });
+		const bytes = await peeked[id];
+		if (bytes.subarray(0, 4096).includes(0)) { pre.textContent = `A binary file of ${(bytes.length / 1024).toFixed(0)} kB: open it on GitHub.`; return; }
+		let text = new TextDecoder().decode(bytes.subarray(0, 400_000));
+		if (!at.line && /\.json$/i.test(at.path)) try { text = JSON.stringify(JSON.parse(text), null, 1); } catch {}
+		const lines = text.split("\n"), row = (i) => el("span", { class: "ln" + (i + 1 === at.line ? " mark" : "") }, el("i", {}, String(i + 1)), lines[i] || " ");
+		let a = 0, b = Math.min(lines.length, 400);
+		if (at.line && code) {   // the function: its decorators, its def, and every line indented under it
+			a = at.line - 1; b = a;
+			while (b < lines.length && /^@/.test(lines[b])) b++;
+			b++;
+			while (b < lines.length && b - a < 120 && (!lines[b].trim() || /^[\s)\]}]/.test(lines[b]))) b++;
+			while (b > a + 1 && !lines[b - 1].trim()) b--;
+		} else if (at.line) { a = Math.max(0, at.line - 4); b = Math.min(lines.length, at.line + 3); }
+		pre.replaceChildren(...Array.from({ length: b - a }, (_, k) => row(a + k)),
+			!at.line && lines.length > b ? el("span", { class: "ln more" }, `… ${lines.length - b} more lines: open it on GitHub`) : "");
+	} catch (e) { pre.textContent = "Could not read it: " + e.message; }
+}
+
+function fileRow(at, code) {
+	const pre = el("pre", { class: "peek", hidden: !code || null });
+	const show = code ? null : el("button", { class: "btn mini", onclick: () => { pre.hidden = !pre.hidden; show.textContent = pre.hidden ? "show" : "hide"; if (!pre.hidden && !pre.dataset.loaded) peek(at, pre, false); } }, "show");
+	if (code) peek(at, pre, true);
+	return [el("div", { class: "file" }, el("a", { href: ghUrl(at), target: "_blank", rel: "noopener" }, at.path + (at.line ? `:${at.line}` : "")),
+		el("span", { class: "muted" }, at.commit ? ` @ ${at.commit}` : " (uncommitted)"), show), pre];
+}
+
+function factCard(name) {
+	const f = S.study.data.facts[name], on = R.sel?.kind === "fact" && R.sel.ref === name;
+	const placed = R.links.some((L) => L.kind === "fact" && L.ref === name);
+	return el("div", { class: "src fact" + (on ? " sel" : ""), "data-ref": name, onclick: (e) => { if (!on && !e.target.closest("a, button")) pick("fact", name, true); } },
+		el("div", { class: "head" }, el("span", { class: "name" }, name), el("span", { class: "grow" }), el("code", { class: "val" }, texText(f.value))),
+		el("div", { class: "where" }, f.used.length ? ["used at ", ...f.used.flatMap((u, i) => [i ? ", " : "", ghLine(u)])] : "not used", R.doc && f.used.length && !placed ? " (not linked in the draft: is it older than this sheet?)" : ""),
+		on ? el("div", {}, el("div", { class: "lbl" }, "Computed by"), ...fileRow(f.code, true),
+			el("div", { class: "lbl" }, f.reads.length ? `Reads ${f.reads.length === 1 ? "one file" : f.reads.length + " files"}` : "Reads no file"),
+			...f.reads.flatMap((r) => fileRow(r, false))) : null);
+}
+
+function claimUseCard(u, i) {
+	const on = R.sel?.kind === "claim" && R.sel.use === i, refs = u.refs.map((ref) => claimState(ref, u));
+	const st = refs.some((r) => r.problem) ? "disputed" : refs.every((r) => r.n?.status === "verified") ? "verified" : "unchecked";
+	return el("div", { class: `src claimuse ${st}` + (on ? " sel" : ""), onclick: (e) => { if (!on && !e.target.closest("a, button")) pick("claim", u.refs[0], true); } },
+		el("div", { class: "head" }, el("span", { class: "dot " + st }), ghLine(`${u.file}:${u.line}`), u.star ? el("span", { title: "\\claim*: the sentence cites the paper itself" }, "· claim*") : null),
+		el("div", { class: "sentence" }, texText(u.sentence)),
+		...refs.map((r) => el("div", { class: "ref" },
+			el("div", { class: "head" }, el("span", { class: "dot " + (r.problem ? "disputed" : r.n.status || "unchecked") }),
+				el("b", {}, S.byKey[r.key] ? `${byline(S.byKey[r.key])} ${S.byKey[r.key].year || ""}` : r.key), r.n ? el("span", {}, `p.${r.n.page}`) : null,
+				el("span", { class: "grow" }), r.n ? el("a", { href: `#/${encodeURIComponent(r.key)}/${r.id}`, title: "Open the paper at this passage" }, "open", icon("out")) : null),
+			on || !r.n ? (r.n ? el("blockquote", { class: r.n.kind === "area" ? "area" : "" }, r.n.quote?.exact || r.n.label || "A box on the page") : null) : null,
+			on && r.n?.note ? el("div", { class: "note" }, r.n.note) : null,
+			r.problem ? el("div", { class: "problem" }, r.problem) : on && r.ok ? el("div", { class: "ok" }, r.ok) : null)));
+}
+
+function drawStudyPanel() {
+	const d = S.study.data, checks = studyChecks();
+	const tab = (id, label) => el("button", { class: "ptab" + (R.tab === id ? " on" : ""), onclick: () => { R.tab = id; drawStudyPanel(); } }, label);
+	let body;
+	if (R.tab === "facts") body = Object.keys(d.facts).length ? Object.keys(d.facts).map(factCard) : el("p", { class: "empty" }, "No facts yet: a number from the study is \\fact{name}, computed in step3_outputs/facts.py.");
+	else if (R.tab === "claims") body = d.claims.length ? d.claims.map(claimUseCard) : el("p", { class: "empty" }, "No claims yet: a sentence that rests on a passage of a paper carries \\claim{Key/id}.");
+	else {
+		const item = (p) => el("li", { class: p.ref ? "go" : "", onclick: p.ref ? () => pick("claim", p.ref, true) : null }, p.text);
+		body = el("div", { class: "checks" },
+			el("h3", {}, checks.problems.length ? `${checks.problems.length} problem${checks.problems.length === 1 ? "" : "s"}` : "No problems"),
+			checks.problems.length ? el("ul", { class: "bad" }, ...checks.problems.map(item))
+				: el("p", { class: "muted" }, "Every fact is defined and used, and every claim names an annotation that is not disputed and agrees with its sentence."),
+			checks.unchecked ? el("p", { class: "muted" }, `${checks.unchecked} claimed passage${checks.unchecked === 1 ? " is" : "s are"} not yet marked verified: open each, read it, and mark it.`) : null,
+			el("h3", {}, `${d.unsourced.length} sentence${d.unsourced.length === 1 ? "" : "s"} with a number and no source`),
+			el("p", { class: "muted" }, "No \\fact, \\claim or \\cite in them. Some numbers are names (a design, an equation); the rest are typed and could go stale."),
+			el("ul", { class: "loose" }, ...d.unsourced.map((x) => el("li", {}, ghLine(`${x.file}:${x.line}`), " ", texText(x.sentence)))));
+	}
+	const grip = el("div", { class: "grip", onclick: () => $("#panel").classList.toggle("tall") });
+	$("#panel").replaceChildren(grip, el("div", { class: "ptabs" }, tab("facts", `Facts · ${Object.keys(d.facts).length}`), tab("claims", `Claims · ${d.claims.length}`),
+		tab("checks", checks.problems.length ? `Checks · ${checks.problems.length} ✗` : "Checks ✓"), el("span", { class: "grow" }),
+		small() ? btn("close", "Close", () => togglePanel(false)) : null), el("div", { class: "pbody" }, body));
+}
+
 // ---- wiring -------------------------------------------------------------------------------
 
 async function route() {
 	$("#pop").hidden = true;
 	if (S.boxing) setBoxing(false);
-	const [, a, b] = location.hash.replace(/^#/, "").split("/");
+	if (R?.study) R.y = scrollY;
+	const [, a, b, c] = location.hash.replace(/^#/, "").split("/");
 	try {
-		if (!a) { R = null; return libraryView(); }
+		if (S.study && (!a || a === "fact" || a === "claim")) return await studyView(a ? a : null, a === "fact" ? decodeURIComponent(b) : a === "claim" ? `${decodeURIComponent(b)}/${c}` : null);
+		if (!a || a === "library") { R = null; return libraryView(); }
 		if (a === "claims") { R = null; return await claimsView(); }
 		return await readerView(decodeURIComponent(a), b);
 	} catch (e) { $("#main").replaceChildren(el("div", { class: "wrap" }, el("p", {}, "Could not open this: " + e.message), el("a", { href: "#/" }, "Back to the library"))); }
@@ -771,6 +1029,8 @@ async function start() {
 	else {
 		if (!auth.token) return signinView();
 		S.src = new GitHubSource(store.get("ps.repo") || CFG.repo, CFG.branch);
+		const study = params.get("study");
+		if (study) S.study = { repo: study, src: new GitHubSource(study, "main"), drafts: new GitHubSource(study, "drafts") };
 	}
 	try { S.me = await S.src.user(); await loadStore(); }
 	catch (e) { if (/sign/.test(e.message)) auth.clear(); return signinView(e.message); }
@@ -781,7 +1041,7 @@ addEventListener("hashchange", route);
 document.addEventListener("selectionchange", () => { clearTimeout(placePop.t); placePop.t = setTimeout(placePop, 180); });
 addEventListener("keydown", (e) => {
 	if (e.target.closest?.("input, textarea, select, dialog") || !R) return;
-	if ((e.key === "b" || e.key === "B") && S.src.canEdit) setBoxing(!S.boxing);
+	if ((e.key === "b" || e.key === "B") && S.src.canEdit && !R.study) setBoxing(!S.boxing);
 	if (e.key === "Escape") { setBoxing(false); $("#pop").hidden = true; }
 	if ((e.ctrlKey || e.metaKey) && e.key === "f" && R.find) { e.preventDefault(); R.find.input.closest(".findbox").hidden = false; R.find.input.focus(); }
 });

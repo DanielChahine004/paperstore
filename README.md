@@ -64,6 +64,19 @@ browser, so the site holds no papers, and it works on a phone.
   figure or table; mark claims verified or disputed; find in the paper; copy a
   link that opens the paper at a claim (`#/Key/id`). Each save is a commit by
   the person who made it.
+- **A study's manuscript:** `?study=owner/repo` opens the draft of a paper
+  written in a repository laid out like the
+  [study template](https://github.com/DanielChahine004/study-template), whose
+  `\fact{name}` and `\claim{Key/id}` say where each number and each sentence
+  comes from. Click a number to see the code that computes it and every file it
+  read, at the commit that made it; click a claim's mark to see the passage it
+  rests on, and open the paper there. Each claim is checked against the store
+  as it is now: an annotation that is missing, disputed, or reports a number
+  the sentence does not state shows as a problem. The Checks tab also lists the
+  sentences that state a number with no source. It reads
+  `report/sources-<paper>.json` (written by the study's `sources.py`) from
+  `main` and `<paper>/draft.pdf` from the `drafts` branch (published by its
+  CI); add the study's repository to the GitHub App so the viewer may read it.
 
 ## Your own store
 
