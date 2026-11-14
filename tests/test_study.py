@@ -99,7 +99,7 @@ def page(gh):
 
 def test_a_fact_opens_its_code_and_files(page, gh):
     page.goto(f"{gh.url}?study={STUDY}#/")
-    link = page.locator(".srclink.fact")
+    link = page.locator(".srclink.k-fact")
     link.wait_for(timeout=30000)
     link.click()
     card = page.locator("#panel .src.fact.sel")
@@ -116,13 +116,13 @@ def test_a_fact_opens_its_code_and_files(page, gh):
 
 def test_claims_are_checked_against_the_store_as_it_is(page, gh):
     page.goto(f"{gh.url}?study={STUDY}#/")
-    page.locator(".srclink.claim").first.wait_for(timeout=30000)
-    assert page.locator(".srclink.claim.verified").count() == 1
-    assert page.locator(".srclink.claim.bad").count() == 1, "99 in the sentence, 106.8 in the paper"
+    page.locator(".srclink.k-claim").first.wait_for(timeout=30000)
+    assert page.locator(".srclink.k-claim.verified").count() == 1
+    assert page.locator(".srclink.k-claim.bad").count() == 1, "99 in the sentence, 106.8 in the paper"
     assert page.locator(".srchl.verified").count() == 1 and page.locator(".srchl.bad").count() == 1, "each claimed sentence highlighted in the text"
     box = page.locator(".srchl.verified").bounding_box()
     assert box["width"] > 150, "the whole sentence, not just the mark"
-    page.locator(".srclink.claim.verified").click()
+    page.locator(".srclink.k-claim.verified").click()
     card = page.locator("#panel .src.claimuse.sel")
     assert "The sensitivity of design A" in card.inner_text()
     assert "as the paper does" in card.inner_text()
@@ -140,7 +140,7 @@ def test_open_a_claimed_passage_and_come_back(page, gh):
     card.locator("a", has_text="open").click()
     page.locator(".hl.sel").first.wait_for(timeout=30000)   # the paper, at the passage
     page.get_by_role("button", name="Back to the manuscript").click()
-    page.locator(".srclink.fact").wait_for(timeout=10000)
+    page.locator(".srclink.k-fact").wait_for(timeout=10000)
     assert page.locator("#bar .tab.on").inner_text() == "Manuscript"
     assert not page.errors
 
@@ -152,9 +152,9 @@ def test_fits_a_phone(gh):
         ctx.add_init_script("localStorage.setItem('ps.token', 'fake')")
         pg = ctx.new_page()
         pg.goto(f"{gh.url}?study={STUDY}#/")
-        pg.locator(".srclink.fact").wait_for(timeout=30000)
+        pg.locator(".srclink.k-fact").wait_for(timeout=30000)
         assert pg.evaluate("document.documentElement.scrollWidth") <= 375
-        pg.locator(".srclink.fact").click()
+        pg.locator(".srclink.k-fact").click()
         assert pg.locator("#panel .src.fact.sel").is_visible()
         browser.close()
 

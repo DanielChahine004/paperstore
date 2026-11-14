@@ -137,13 +137,13 @@ body.paneled #pages { margin-right: var(--panel); }
 .srclink, .srchl { position: absolute; border-radius: 2px; cursor: pointer; mix-blend-mode: var(--hl-blend); }
 /* highlighted as the text is in the paper store: a fact's number, a claim's sentence (and its small mark) */
 .srclink { z-index: 4; }
-.srclink.fact { background: rgba(0, 150, 150, .20); }
-.srclink.claim { background: var(--hl); }
+.srclink.k-fact { background: rgba(0, 150, 150, .20); }
+.srclink.k-claim { background: var(--hl); }
 .srchl { z-index: 3; background: var(--hl); }
-.srclink.claim.verified, .srchl.verified { background: var(--ok-soft); }
+.srclink.k-claim.verified, .srchl.verified { background: var(--ok-soft); }
 .srclink.bad, .srchl.bad { background: var(--bad-soft); }
 .srclink:hover, .srchl:hover { filter: saturate(1.8) brightness(.92); }
-.srclink.fact.sel { background: rgba(0, 150, 150, .45); }
+.srclink.k-fact.sel { background: rgba(0, 150, 150, .45); }
 .srclink.sel, .srchl.sel { box-shadow: inset 0 -2px 0 var(--accent); }   /* underlined, not boxed */
 .srclink.flash, .srchl.flash { animation: srcflash .7s ease-in-out 3; }
 @keyframes srcflash { 50% { opacity: .25; } }

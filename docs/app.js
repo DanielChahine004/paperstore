@@ -880,7 +880,7 @@ function sentenceLines(T, L, vp) {
 	let m = -1;
 	for (let j = 0; j < T.at.length; j++) {
 		const it = T.items[T.at[j][0]], y = it.transform[5];
-		if (y > my0 - 12 && y < my1 + 4 && charX(j) < mx + 1) m = j;
+		if (y > my0 - 6 && y < my1 + 1 && charX(j) < mx + 1) m = j;   // the mark's own line only: the next is ~12 pt lower
 	}
 	if (m < 0) return null;
 	let head = runs[0].slice(0, 30), start = T.text.lastIndexOf(head, m);
@@ -888,19 +888,22 @@ function sentenceLines(T, L, vp) {
 	if (start < 0 || m - start > 1500) return null;   // begins on the page before, or not found: the mark alone
 	const tail = runs.at(-1).slice(-24), t = T.text.indexOf(tail, start);
 	const end = t >= 0 && t - start < 2000 ? Math.max(t + tail.length, m + 1) : m + 1;
-	// one box per text item touched, merged into one per line
+	// the characters' extent on each line, as one band at the height of the line's body text (a
+	// superscript or a subscript joins its line rather than making a box of its own)
 	const spans = new Map();
 	for (let j = start; j < end; j++) { const [i, k] = T.at[j], s = spans.get(i); if (s) { s[0] = Math.min(s[0], k); s[1] = Math.max(s[1], k); } else spans.set(i, [k, k]); }
 	const lines = [];
 	for (const [i, [a, b]] of spans) {
 		const it = T.items[i], [, , c, d, x, y] = it.transform, fs = Math.hypot(c, d) || it.height || 10, w = it.width / it.str.length;
-		const [X0, Y0, X1, Y1] = vp.convertToViewportRectangle([x + w * a, y - 0.22 * fs, x + w * (b + 1), y + 0.82 * fs]);
-		const r = [Math.min(X0, X1) / vp.width, Math.min(Y0, Y1) / vp.height, Math.max(X0, X1) / vp.width, Math.max(Y0, Y1) / vp.height];
-		const same = lines.find((l) => Math.abs((l[1] + l[3]) / 2 - (r[1] + r[3]) / 2) < (r[3] - r[1]) / 2);
-		if (same) { same[0] = Math.min(same[0], r[0]); same[2] = Math.max(same[2], r[2]); same[1] = Math.min(same[1], r[1]); same[3] = Math.max(same[3], r[3]); }
-		else lines.push(r);
+		let line = lines.find((l) => Math.abs(l.y - y) < Math.max(l.fs, fs) * 0.6);
+		if (!line) lines.push(line = { y, fs, x0: Infinity, x1: -Infinity });
+		if (fs > line.fs) { line.fs = fs; line.y = y; }
+		line.x0 = Math.min(line.x0, x + w * a); line.x1 = Math.max(line.x1, x + w * (b + 1));
 	}
-	return lines;
+	return lines.map((l) => {
+		const [X0, Y0, X1, Y1] = vp.convertToViewportRectangle([l.x0, l.y - 0.24 * l.fs, l.x1, l.y + 0.76 * l.fs]);
+		return [Math.min(X0, X1) / vp.width, Math.min(Y0, Y1) / vp.height, Math.max(X0, X1) / vp.width, Math.max(Y0, Y1) / vp.height];
+	});
 }
 
 const useOf = (ref) => S.study.data.claims.findIndex((u) => u.refs.includes(ref));
@@ -918,7 +921,7 @@ function drawLinks() {
 		for (const [a, b, c, d] of L.lines || [])   // the sentence itself, highlighted
 			P.div.append(el("div", { class: `srchl${look}${linkOn(L) ? " sel" : ""}`, "data-kind": "claim", "data-ref": L.ref, title: `${L.ref}: the passage it rests on`,
 				style: `left:${a * 100}%;top:${b * 100}%;width:${(c - a) * 100}%;height:${(d - b) * 100}%`, onclick: () => pick("claim", L.ref, false) }));
-		P.div.append(el("a", { class: `srclink ${L.kind}${look}${linkOn(L) ? " sel" : ""}`,
+		P.div.append(el("a", { class: `srclink k-${L.kind}${look}${linkOn(L) ? " sel" : ""}`,
 			"data-kind": L.kind, "data-ref": typeof L.ref === "string" ? L.ref : "",
 			title: L.kind === "fact" ? `${L.ref}: where it comes from` : L.kind === "claim" ? `${L.ref}: the passage it rests on` : L.kind === "link" ? L.ref : null,
 			href: L.kind === "link" ? L.ref : null, target: L.kind === "link" ? "_blank" : null, rel: L.kind === "link" ? "noopener" : null,
