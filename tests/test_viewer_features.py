@@ -210,3 +210,14 @@ def test_quote_link_opens_page_and_highlights_it(page, gh):
     page.goto(f"{gh.url}#/{KEY}/p3/" + __import__("urllib.parse").parse.quote(q, safe=""))
     assert wait_for(page, lambda: page.locator(".hl.quote").count() == 0)
     assert not page.errors
+
+
+def test_quote_link_survives_sign_in(page, gh):
+    # a signed-out reader is sent to GitHub with the route as `then`; the helper returns #token=...&then=<route>
+    from urllib.parse import quote, urlencode
+    q = "the University of Pennsylvania, resulted in the first TB-PET systems"
+    route = f"/{KEY}/p2/" + quote(q, safe="")
+    page.goto(f"{gh.url}#" + urlencode({"token": "t", "refresh": "", "expires_in": "0", "then": route}))
+    assert wait_for(page, lambda: page.locator(".page[data-n='2'] .hl.quote").count() >= 2, 30000)
+    assert page.evaluate("location.hash") == "#" + route
+    assert not page.errors
