@@ -459,10 +459,39 @@ function editInline(card, key, n) {
 		el("button", { class: "btn primary", onclick: () => edit(key, n.id, { note: note.value.trim(), tags: tags.value.split(/\s+/).filter(Boolean) }, "edit note") }, "Save"))));
 	note.focus();
 }
-async function edit(key, id, patch, what) {
-	try { await saveNotes(key, (list) => list.map((x) => (x.id === id ? { ...x, ...patch, modified: nowIso() } : x)), `${key}: ${what} (${id})`); refreshReader(id); }
-	catch (e) { toast(e.message, 5000); }
+// an edit shows at once and is saved behind it: a paper's edits made within a moment of each other go
+// to GitHub as one commit, and a save that fails puts the paper's claims back as GitHub has them
+const pending = {};   // key -> { patches: Map(id -> patch), whats: [], timer, saving }
+function edit(key, id, patch, what) {
+	const p = { ...patch, modified: nowIso() };
+	S.notes[key] = (S.notes[key] || []).map((x) => (x.id === id ? { ...x, ...p } : x));
+	refreshReader(id);
+	const q = (pending[key] ??= { patches: new Map(), whats: [] });
+	q.patches.set(id, { ...(q.patches.get(id) || {}), ...p });
+	q.whats.push(`${what} (${id})`);
+	clearTimeout(q.timer);
+	q.timer = setTimeout(() => flush(key), 900);
 }
+async function flush(key) {
+	const q = pending[key];
+	if (!q || q.saving || !q.patches.size) return;   // one save at a time per paper; the next starts when it ends
+	const patches = q.patches, whats = q.whats;
+	q.patches = new Map(); q.whats = []; q.saving = true;
+	try {
+		await saveNotes(key, (list) => list.map((x) => (patches.has(x.id) ? { ...x, ...patches.get(x.id) } : x)), `${key}: ${whats.join("; ")}`);
+		for (const [id, x] of q.patches) S.notes[key] = S.notes[key].map((n) => (n.id === id ? { ...n, ...x } : n));   // edits made while it saved
+	} catch (e) {
+		q.patches = new Map(); q.whats = [];
+		delete S.notes[key];
+		await notesOf(key).catch(() => {});
+		toast(`Not saved: ${e.message}`, 6000);
+	} finally {
+		q.saving = false;
+		refreshReader();
+		if (q.patches.size) flush(key);
+	}
+}
+addEventListener("beforeunload", (e) => { if (Object.values(pending).some((q) => q.saving || q.patches.size)) e.preventDefault(); });
 async function removeNote(key, id) {
 	try { await saveNotes(key, (list) => list.filter((x) => x.id !== id), `${key}: delete claim ${id}`); refreshReader(); }
 	catch (e) { toast(e.message, 5000); }
