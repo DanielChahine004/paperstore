@@ -1154,9 +1154,12 @@ async function goDest(dest) {   // a \ref or a citation: the place in this PDF i
 	backTo(scrollY);
 	scrollTo({ top: P.div.offsetTop + y - 80, behavior: "smooth" });
 	if (d[1]?.name === "XYZ" && d[3] != null) {   // once the scroll has landed, so the highlight is seen
-		const go = () => { clearTimeout(t); removeEventListener("scrollend", go); markDest(n, d[3], y); };
-		const t = setTimeout(go, 1500);
-		addEventListener("scrollend", go);
+		let last = -1, still = 0, t0 = performance.now();
+		const wait = () => {   // until the page has not moved for a few frames (scrollend is not reliable here)
+			still = scrollY === last ? still + 1 : 0; last = scrollY;
+			if (still >= 6 || performance.now() - t0 > 6000) markDest(n, d[3], y); else requestAnimationFrame(wait);
+		};
+		requestAnimationFrame(wait);
 	}
 }
 
