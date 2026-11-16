@@ -248,5 +248,5 @@ dialog#composer::backdrop { background: rgba(0,0,0,.25); }
 
 /* an open page notices a new deploy of this file within 20 s and reloads (live.js) */
 
-.destmark { position: absolute; z-index: 2; left: 7%; right: 7%; border-radius: 4px; pointer-events: none; background: rgba(255, 214, 10, .45); animation: destfade 2.6s ease-out forwards; }
-@keyframes destfade { 0%, 45% { opacity: 1; } 100% { opacity: 0; } }
+.destmark { position: absolute; z-index: 2; left: 7%; right: 7%; border-radius: 4px; pointer-events: none; background: rgba(255, 214, 10, .45); animation: destfade 2.4s ease-out forwards; }
+@keyframes destfade { 0%, 55% { opacity: 1; } 100% { opacity: 0; } }
