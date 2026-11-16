@@ -590,6 +590,28 @@ function togglePanel(on = !R.panel) {
 	R.panelBtn?.classList.toggle("on", on);
 	if (!small()) relayout();
 }
+function pageScale() {   // the drawing scale for S.scale: on a phone relative to the screen's width, on a desktop capped at it
+	const room = document.documentElement.clientWidth - (small() ? 4 : (R.panel ? 380 : 0) + 48);   // clientWidth: no scrollbar
+	return small() ? room / R.base * Math.min(S.scale / 1.2, 3) : Math.min(S.scale, room / R.base);
+}
+
+// every page to the current S.scale without rebuilding: the old drawing is stretched at once and stays
+// on top until the sharp one under it is done, so nothing goes blank
+function rescale() {
+	const k = pageScale() / R.scale;
+	R.scale *= k;
+	R.observer.disconnect();
+	for (let n = 1; n < R.pages.length; n++) {
+		const P = R.pages[n];
+		P.w *= k; P.h *= k; P.done = false;
+		Object.assign(P.div.style, { width: `${P.w}px`, height: `${P.h}px` });
+		P.div.style.setProperty("--scale-factor", R.scale);
+		P.div.querySelectorAll(".textLayer").forEach((x) => x.remove());
+		P.div.querySelectorAll("canvas").forEach((c) => c.classList.add("stale"));
+		R.observer.observe(P.div);   // observing again reports the pages in range, which draws them
+	}
+}
+
 async function relayout() {
 	if (!R?.doc) return;
 	const keep = R.pages.length ? currentPage() : 1;
@@ -598,16 +620,16 @@ async function relayout() {
 }
 
 async function layout() {
-	const box = el("div", { id: "pages" });
-	$("#main").replaceChildren(box);
+	const scroller = el("div", { id: "pages" }), box = el("div", { id: "sheet" });
+	scroller.append(box);
+	$("#main").replaceChildren(scroller);
 	pinchZoom(box);
 	R.observer?.disconnect();
 	R.observer = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && renderPage(Number(e.target.dataset.n))), { rootMargin: "1200px 0px" });
 	R.pages = [];
 	const first = await R.doc.getPage(1);
-	const room = document.documentElement.clientWidth - (small() ? 4 : (R.panel ? 380 : 0) + 48);   // clientWidth: no scrollbar
-	const base = first.getViewport({ scale: 1 }).width;
-	R.scale = small() ? room / base * Math.min(S.scale / 1.2, 3) : Math.min(S.scale, room / base);
+	R.base = first.getViewport({ scale: 1 }).width;
+	R.scale = pageScale();
 	for (let n = 1; n <= R.doc.numPages; n++) {
 		const vp = (n === 1 ? first : await R.doc.getPage(n)).getViewport({ scale: R.scale });
 		const div = el("div", { class: "page", "data-n": n, style: `width:${vp.width}px;height:${vp.height}px;--scale-factor:${R.scale}` });
@@ -628,6 +650,8 @@ async function renderPage(n) {
 	const canvas = el("canvas", { width: Math.floor(vp.width * ratio), height: Math.floor(vp.height * ratio) });
 	P.div.prepend(canvas);
 	await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp, transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : null }).promise;
+	P.div.querySelectorAll("canvas.stale").forEach((c) => c !== canvas && c.remove());
+	if (vp.scale !== R.scale) { P.done = false; return; }   // rescaled while drawing: drawn again when next in view
 	const tl = el("div", { class: "textLayer" });
 	P.div.append(tl);
 	await new pdfjs.TextLayer({ textContentSource: page.streamTextContent(), container: tl, viewport: vp }).render();
@@ -863,23 +887,26 @@ function pinchZoom(box) {
 		const q = R.pages[n].div.getBoundingClientRect();
 		g = { d0: dist(e.touches), x, y, ratio: 1, n, fx: (x - q.left) / q.width, fy: (y - q.top) / q.height };
 		box.style.transformOrigin = `${x - r.left}px ${y - r.top}px`;
+		box.style.willChange = "transform";
 	}, { passive: true });
 	box.addEventListener("touchmove", (e) => {
 		if (!g || e.touches.length !== 2) return;
 		e.preventDefault();
 		g.ratio = Math.min(4 / S.scale, Math.max(0.5 / S.scale, dist(e.touches) / g.d0));
-		box.style.transform = `scale(${g.ratio})`;
+		if (!g.frame) g.frame = requestAnimationFrame(() => { if (g) { box.style.transform = `scale(${g.ratio})`; g.frame = 0; } });
 	}, { passive: false });
 	const end = async () => {
 		if (!g) return;
-		const { x, y, ratio, n, fx, fy } = g;
+		const { x, y, ratio, n, fx, fy, frame } = g;
 		g = null;
-		if (Math.abs(ratio - 1) < 0.03) { box.style.transform = ""; return; }
+		cancelAnimationFrame(frame);
+		box.style.transform = ""; box.style.willChange = "";
+		if (Math.abs(ratio - 1) < 0.03) return;
 		S.scale = Math.min(4, Math.max(0.5, S.scale * ratio));
 		store.set("ps.scale", S.scale);
-		await layout();
-		const P = R.pages[n], q = P.div.getBoundingClientRect(), now = $("#pages");
-		now.scrollLeft += q.left + fx * P.w - x;
+		rescale();
+		const P = R.pages[n], q = P.div.getBoundingClientRect();
+		$("#pages").scrollLeft += q.left + fx * P.w - x;
 		scrollBy(0, q.top + fy * P.h - y);
 	};
 	box.addEventListener("touchend", end);
