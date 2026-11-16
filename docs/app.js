@@ -1356,6 +1356,78 @@ function drawStudyPanel() {
 		small() ? btn("close", "Close", () => togglePanel(false)) : null), el("div", { class: "pbody" }, body));
 }
 
+// ---- live: what others change, seen without reloading ---------------------------------------
+// GitHub sends a page nothing, so an open page asks every few seconds whether a branch has moved. An
+// unchanged branch answers 304, which costs nothing against the rate limit; when it has moved, the
+// files that changed are read again and the view redrawn. A paper with an edit of this page's still
+// being saved is left alone: its own save brings it up to date.
+
+const LIVE_MS = 8000;
+const heads = {};   // "repo@branch" -> { sha, etag }
+async function moved(src) {   // the files a branch changed since last asked, or null
+	const k = `${src.repo}@${src.branch}`, h = (heads[k] ??= {});
+	const r = await src.req(`commits/${src.branch}`, { cache: "no-store", headers: { Accept: "application/vnd.github.sha", ...(h.etag ? { "If-None-Match": h.etag } : {}) } });
+	if (r.status === 304 || !r.ok) return null;
+	h.etag = r.headers.get("ETag");
+	const sha = (await r.text()).trim(), before = h.sha;
+	h.sha = sha;
+	if (!before || before === sha) return null;
+	const c = await src.req(`compare/${before}...${sha}`);
+	return c.ok ? ((await c.json()).files || []).map((f) => f.filename) : ["*"];
+}
+
+async function followStore() {
+	const files = await moved(S.src);
+	if (!files) return;
+	const all = files.includes("*");
+	if (all || files.includes("references.bib")) {
+		S.papers = parseBib((await S.src.text("references.bib")) || "");
+		S.byKey = Object.fromEntries(S.papers.map((p) => [p.key, p]));
+	}
+	const keys = all ? S.annotated : files.flatMap((f) => (/^annotations\/(.+)\.json$/.exec(f) || []).slice(1));
+	let changed = false;
+	for (const key of keys) {
+		const q = pending[key];
+		if (q && (q.saving || q.patches.size)) continue;
+		const text = await S.src.text(`annotations/${key}.json`);
+		S.notes[key] = text ? JSON.parse(text).annotations : [];
+		if (text && !S.annotated.includes(key)) S.annotated.push(key);
+		changed = true;
+	}
+	if (!changed && !files.includes("references.bib")) return;
+	if (R?.study) { drawStudyPanel(); drawLinks(); }
+	else if (R) refreshReader();
+	else { const y = scrollY; await route(); scrollTo(0, y); }   // the library or the claims page, where it was
+}
+
+async function followStudy() {
+	const st = S.study;
+	if (!st?.data) return;
+	const files = await moved(st.src);
+	if (files && (files.includes("*") || files.includes(`report/sources-${st.paper}.json`))) {
+		st.data = JSON.parse(await st.src.text(`report/sources-${st.paper}.json`));
+		st.bySlug = Object.fromEntries(Object.entries(st.data.facts).map(([name, f]) => [f.slug, name]));
+		if (R?.study) drawStudyPanel();
+	}
+	const drafts = await moved(st.drafts);
+	if (drafts && (drafts.includes("*") || drafts.includes(st.data.draft)) && R?.study && R === S.studyR) {   // a new draft: open it where the reader was
+		const y = scrollY;
+		S.studyR = null;
+		await studyView(null, null);
+		scrollTo(0, y);
+		toast("The draft was rebuilt");
+	}
+}
+
+async function follow() {
+	if (document.visibilityState === "visible" && S.src instanceof GitHubSource && S.loaded !== false) {
+		try { await followStore(); await followStudy(); } catch {}   // a missed beat is caught up on the next
+	}
+	clearTimeout(follow.t);
+	follow.t = setTimeout(follow, LIVE_MS);
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") follow(); });
+
 // ---- wiring -------------------------------------------------------------------------------
 
 async function route() {
@@ -1385,6 +1457,7 @@ async function start() {
 	try { S.me = await S.src.user(); await loadStore(); }
 	catch (e) { if (/sign/.test(e.message)) auth.clear(); return signinView(e.message); }
 	await route();
+	follow();
 }
 
 addEventListener("hashchange", route);
