@@ -996,6 +996,7 @@ async function studyView(kind, ref) {
 
 async function scanLinks() {   // every link in the draft: a fact, a claim, a place in the paper, or a web address
 	const out = [], st = S.study;
+	let before = null;   // the page before: { n, page, vp, T (its text, read when first needed) }
 	for (let n = 1; n <= R.doc.numPages; n++) {
 		const page = await R.doc.getPage(n), vp = page.getViewport({ scale: 1 });
 		for (const a of await page.getAnnotations()) {
@@ -1012,8 +1013,16 @@ async function scanLinks() {   // every link in the draft: a fact, a claim, a pl
 		const claims = out.filter((L) => L.page === n && L.kind === "claim");
 		if (claims.length) {   // each claim's sentence, highlighted in the text as the paper store highlights a quote
 			const text = pageStream(await page.getTextContent());
-			for (const L of claims) L.lines = sentenceLines(text, L, vp);
+			for (const L of claims) {
+				let r = sentenceLines(text, L, vp);
+				if (r === "earlier" && before) {   // begun on the page before: both parts
+					before.T ??= pageStream(await before.page.getTextContent());
+					r = splitSentenceLines(text, L, vp, before);
+				}
+				if (r && r !== "earlier") { L.lines = r.lines; L.prevLines = r.prev; }
+			}
 		}
+		before = { n, page, vp };
 	}
 	return out;
 }
@@ -1052,9 +1061,35 @@ function sentenceLines(T, L, vp) {
 	if (m < 0) return null;
 	let head = runs[0].slice(0, 30), start = T.text.lastIndexOf(head, m);
 	if (start < 0) { head = runs[0].slice(0, 14); start = T.text.lastIndexOf(head, m); }
-	if (start < 0 || m - start > 1500) return null;   // begins on the page before, or not found: the mark alone
+	if (start < 0 || m - start > 1500) return "earlier";   // begins on the page before, or not found here
 	const tail = runs.at(-1).slice(-24), t = T.text.indexOf(tail, start);
 	const end = t >= 0 && t - start < 2000 ? Math.max(t + tail.length, m + 1) : m + 1;
+	return { lines: rangeLines(T, vp, start, end) };
+}
+
+// a sentence carried over a page break: its head runs to the foot of the page before (the page number
+// left out), and the rest from the top of this page to the mark; null if the head is not there either
+function splitSentenceLines(T, L, vp, before) {
+	const u = S.study.data.claims[useOf(L.ref)], runs = u ? proseRuns(u) : [];
+	if (!runs.length) return null;
+	const P = before.T.text;
+	let start = P.lastIndexOf(runs[0].slice(0, 30));
+	if (start < 0) start = P.lastIndexOf(runs[0].slice(0, 14));
+	if (start < 0 || P.length - start > 1500) return null;
+	let pend = P.length;
+	while (pend > start && /[0-9]/.test(P[pend - 1])) pend--;   // the page number at its foot
+	const [mx, my0, , my1] = L.pdf, charX = (j) => { const [i, k] = T.at[j], it = T.items[i]; return it.transform[4] + it.width * k / it.str.length; };
+	let m = -1;
+	for (let j = 0; j < T.at.length; j++) {
+		const it = T.items[T.at[j][0]], y = it.transform[5];
+		if (y > my0 - 6 && y < my1 + 1 && charX(j) < mx + 1) m = j;
+	}
+	if (m < 0 || m > 1500) return null;
+	return { lines: rangeLines(T, vp, 0, m + 1), prev: { page: before.n, lines: rangeLines(before.T, before.vp, start, pend) } };
+}
+
+// the characters start..end of a page's text as one band per line, at the height of the line's body text
+function rangeLines(T, vp, start, end) {
 	// the characters' extent on each line, as one band at the height of the line's body text (a
 	// superscript or a subscript joins its line rather than making a box of its own)
 	const spans = new Map();
@@ -1085,9 +1120,10 @@ function drawLinks() {
 		// a claim's one mark stands for every annotation it names: red if any fails, green when all are verified
 		const u = L.kind === "claim" ? S.study.data.claims[useOf(L.ref)] : null, sts = u ? u.refs.map((r) => claimState(r, u)) : L.kind === "claim" ? [claimState(L.ref)] : [];
 		const look = sts.some((x) => x.problem) ? " bad" : sts.length && sts.every((x) => x.n?.status === "verified") ? " verified" : "";
-		for (const [a, b, c, d] of L.lines || [])   // the sentence itself, highlighted
-			P.div.append(el("div", { class: `srchl${look}${linkOn(L) ? " sel" : ""}`, "data-kind": "claim", "data-ref": L.ref, title: `${L.ref}: the passage it rests on`,
-				style: `left:${a * 100}%;top:${b * 100}%;width:${(c - a) * 100}%;height:${(d - b) * 100}%`, onclick: () => pick("claim", L.ref, false) }));
+		for (const [div, lines] of [[P.div, L.lines], [R.pages[L.prevLines?.page]?.div, L.prevLines?.lines]])   // the sentence itself, on one page or two
+			for (const [a, b, c, d] of (div && lines) || [])
+				div.append(el("div", { class: `srchl${look}${linkOn(L) ? " sel" : ""}`, "data-kind": "claim", "data-ref": L.ref, title: `${L.ref}: the passage it rests on`,
+					style: `left:${a * 100}%;top:${b * 100}%;width:${(c - a) * 100}%;height:${(d - b) * 100}%`, onclick: () => pick("claim", L.ref, false) }));
 		// a claim whose sentence was found is shown by its highlight alone; its link stays, invisible, as the anchor
 		P.div.append(el("a", { class: `srclink k-${L.kind}${look}${linkOn(L) ? " sel" : ""}${L.kind === "claim" && L.lines?.length ? " anchor" : ""}`,
 			"data-kind": L.kind, "data-ref": typeof L.ref === "string" ? L.ref : "",
@@ -1124,7 +1160,7 @@ function pick(kind, ref, scroll) {   // a fact or a claim, in the panel and in t
 	$("#panel .src.sel")?.scrollIntoView({ block: "nearest" });
 	const L = R.links.find((x) => linkOn(x));
 	if (scroll && L && R.pages[L.page]) {
-		const P = R.pages[L.page], top = L.lines?.[0]?.[1] ?? L.rect[1];
+		const P = R.pages[L.prevLines?.page ?? L.page], top = (L.prevLines?.lines ?? L.lines)?.[0]?.[1] ?? L.rect[1];
 		scrollTo({ top: Math.max(0, P.div.offsetTop + top * P.h - (small() ? 90 : innerHeight / 3)), behavior: "smooth" });
 	}
 	setTimeout(() => $$(".srclink.sel, .srchl.sel").forEach((h) => { h.classList.remove("flash"); void h.offsetWidth; h.classList.add("flash"); }), scroll ? 350 : 0);
