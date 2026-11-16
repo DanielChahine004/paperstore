@@ -126,6 +126,12 @@ class GitHubSource {
 	async bytes(path, ref) { const r = await this.raw(path, ref); if (!r.ok) throw Object.assign(new Error(`${path}: GitHub said ${r.status}`), { status: r.status }); return r.arrayBuffer(); }
 	async blob(path) { const r = await this.raw(path); return r.ok ? r.blob() : null; }
 	async list(dir) { const r = await this.req(`contents/${dir}?ref=${this.branch}`); return r.ok ? (await r.json()).map((f) => f.name) : []; }
+	async putBytes(path, bytes, message) {   // a new binary file (a thumbnail); a file already there is left as it is
+		let bin = "";
+		for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+		const put = await this.req(`contents/${encodeURI(path)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message, content: btoa(bin), branch: this.branch }) });
+		if (!put.ok && put.status !== 422) throw new Error(`save failed: GitHub said ${put.status}`);
+	}
 	async update(path, change, message) {   // read-modify-write on the file's sha; retried if someone saved in between
 		for (let i = 0; i < 3; i++) {
 			// no-store: a cached copy would be the raw file text() fetched (same URL, other Accept),
@@ -208,9 +214,26 @@ const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(3)), (b) =>
 const nowIso = () => new Date().toISOString().replace(/\.\d+Z$/, "Z");
 const claimLink = (key, id) => location.origin + location.pathname + (S.src.repo !== CFG.repo && !(S.src instanceof StaticSource) ? `?repo=${S.src.repo}` : location.search) + `#/${key}/${id}`;
 
-async function thumb(key) {   // the first-page JPEG, fetched once per visit
-	if (!(key in S.thumbs)) S.thumbs[key] = S.src.blob(`thumbs/${key}.jpg`).then((b) => (b ? URL.createObjectURL(b) : null)).catch(() => null);
+async function thumb(key) {   // the first-page JPEG, fetched once per visit; drawn from the PDF where there is none
+	if (!(key in S.thumbs)) S.thumbs[key] = S.src.blob(`thumbs/${key}.jpg`).then((b) => b || drawThumb(key)).then((b) => (b ? URL.createObjectURL(b) : null)).catch(() => null);
 	return S.thumbs[key];
+}
+
+// a paper with no thumbs/<Key>.jpg yet (added without the command-line tool): its first page, drawn
+// 240 px wide like the tool's, and saved to the store by whoever may edit it, so it is drawn once
+async function drawThumb(key) {
+	const p = S.byKey[key];
+	if (!p?.file) return null;
+	const doc = await pdfjs.getDocument({ data: await S.src.bytes(p.file) }).promise;
+	try {
+		const page = await doc.getPage(1), vp = page.getViewport({ scale: 240 / page.getViewport({ scale: 1 }).width });
+		const c = el("canvas", { width: Math.round(vp.width), height: Math.round(vp.height) });
+		await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+		const jpg = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.8));
+		if (jpg && S.src.canEdit && S.src.putBytes)
+			S.src.putBytes(`thumbs/${key}.jpg`, new Uint8Array(await jpg.arrayBuffer()), `Thumbnail of ${key}, drawn by the viewer`).catch(() => {});
+		return jpg;
+	} finally { doc.destroy(); }
 }
 const thumbObserver = new IntersectionObserver((es) => es.forEach(async (e) => {
 	if (!e.isIntersecting) return;
