@@ -1014,12 +1014,16 @@ async function scanLinks() {   // every link in the draft: a fact, a claim, a pl
 		if (claims.length) {   // each claim's sentence, highlighted in the text as the paper store highlights a quote
 			const text = pageStream(await page.getTextContent());
 			for (const L of claims) {
-				let r = sentenceLines(text, L, vp);
-				if (r === "earlier" && before) {   // begun on the page before: both parts
+				const uses = S.study.data.claims.flatMap((u, i) => (u.refs.includes(L.ref) ? [i] : []));
+				let found = null;
+				for (const i of uses) { L.use = i; const r = sentenceLines(text, L, vp); if (r && r !== "earlier") { found = r; break; } }
+				if (!found && before) for (const i of uses) {   // begun on the page before: both parts
+					L.use = i;
 					before.T ??= pageStream(await before.page.getTextContent());
-					r = splitSentenceLines(text, L, vp, before);
+					found = splitSentenceLines(text, L, vp, before);
+					if (found) break;
 				}
-				if (r && r !== "earlier") { L.lines = r.lines; L.prevLines = r.prev; }
+				if (found) { L.lines = found.lines; L.prevLines = found.prev; } else L.use = uses[0];
 			}
 		}
 		before = { n, page, vp };
@@ -1048,7 +1052,7 @@ function proseRuns(u) {
 }
 
 function sentenceLines(T, L, vp) {
-	const u = S.study.data.claims[useOf(L.ref)];
+	const u = S.study.data.claims[L.use ?? useOf(L.ref)];
 	const runs = u ? proseRuns(u) : [];
 	if (!runs.length) return null;
 	// where the mark is in the text: after the last character left of it on its line
@@ -1070,14 +1074,18 @@ function sentenceLines(T, L, vp) {
 // a sentence carried over a page break: its head runs to the foot of the page before (the page number
 // left out), and the rest from the top of this page to the mark; null if the head is not there either
 function splitSentenceLines(T, L, vp, before) {
-	const u = S.study.data.claims[useOf(L.ref)], runs = u ? proseRuns(u) : [];
+	const u = S.study.data.claims[L.use ?? useOf(L.ref)], runs = u ? proseRuns(u) : [];
 	if (!runs.length) return null;
 	const P = before.T.text;
-	let start = P.lastIndexOf(runs[0].slice(0, 30));
-	if (start < 0) start = P.lastIndexOf(runs[0].slice(0, 14));
-	if (start < 0 || P.length - start > 1500) return null;
 	let pend = P.length;
-	while (pend > start && /[0-9]/.test(P[pend - 1])) pend--;   // the page number at its foot
+	while (pend > 0 && /[0-9]/.test(P[pend - 1])) pend--;   // the page number at its foot
+	// the head: the longest start of the sentence the page ends with (a page may end a few words in),
+	// else its first words further up
+	let start = -1;
+	for (let k = Math.min(runs[0].length, 1500); k >= 6 && start < 0; k--) if (P.slice(0, pend).endsWith(runs[0].slice(0, k))) start = pend - k;
+	if (start < 0) start = P.lastIndexOf(runs[0].slice(0, 30));
+	if (start < 0) start = P.lastIndexOf(runs[0].slice(0, 14));
+	if (start < 0 || pend - start > 1500) return null;
 	const [mx, my0, , my1] = L.pdf, charX = (j) => { const [i, k] = T.at[j], it = T.items[i]; return it.transform[4] + it.width * k / it.str.length; };
 	let m = -1;
 	for (let j = 0; j < T.at.length; j++) {
@@ -1118,7 +1126,7 @@ function drawLinks() {
 		if (!P) continue;
 		const pad = L.kind === "claim" ? 0.005 : 0, [x0, y0, x1, y1] = L.rect;
 		// a claim's one mark stands for every annotation it names: red if any fails, green when all are verified
-		const u = L.kind === "claim" ? S.study.data.claims[useOf(L.ref)] : null, sts = u ? u.refs.map((r) => claimState(r, u)) : L.kind === "claim" ? [claimState(L.ref)] : [];
+		const u = L.kind === "claim" ? S.study.data.claims[L.use ?? useOf(L.ref)] : null, sts = u ? u.refs.map((r) => claimState(r, u)) : L.kind === "claim" ? [claimState(L.ref)] : [];
 		const look = sts.some((x) => x.problem) ? " bad" : sts.length && sts.every((x) => x.n?.status === "verified") ? " verified" : "";
 		for (const [div, lines] of [[P.div, L.lines], [R.pages[L.prevLines?.page]?.div, L.prevLines?.lines]])   // the sentence itself, on one page or two
 			for (const [a, b, c, d] of (div && lines) || [])
