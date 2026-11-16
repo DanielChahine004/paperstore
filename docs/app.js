@@ -812,6 +812,7 @@ async function loadStudy() {
 	const st = S.study;
 	const r = await st.src.req("");
 	if (!r.ok) throw Object.assign(new Error(`${S.me} cannot open ${st.repo}` + (r.status === 404 ? "" : ` (GitHub said ${r.status})`)), { install: r.status === 404 });
+	st.canEdit = !!((await r.json()).permissions || {}).push;
 	st.papers = (await st.src.list("report")).map((f) => /^sources-(.+)\.json$/.exec(f)?.[1]).filter(Boolean).sort();
 	if (!st.papers.length) throw new Error(`${st.repo} has no report/sources-<paper>.json yet: run step3_outputs/sources.py there and push`);
 	st.paper = st.papers.includes(params.get("paper")) ? params.get("paper") : st.papers[0];
@@ -982,7 +983,14 @@ async function goDest(dest) {   // a \ref or a citation: the place in this PDF i
 	if (!P) return;
 	let y = 0;
 	if (d[1]?.name === "XYZ" && d[3] != null) y = (await R.doc.getPage(n)).getViewport({ scale: R.scale }).convertToViewportPoint(0, d[3])[1];
+	backTo(scrollY);
 	scrollTo({ top: P.div.offsetTop + y - 80, behavior: "smooth" });
+}
+
+function backTo(y) {   // after a jump (a citation, a reference, a sentence found): one tap returns to where the reader was
+	$("#backto")?.remove();
+	const b = el("button", { id: "backto", class: "btn backto", onclick: () => { scrollTo({ top: y, behavior: "smooth" }); b.remove(); } }, icon("back"), "Back to where you were reading");
+	document.body.append(b);
 }
 
 function pick(kind, ref, scroll) {   // a fact or a claim, in the panel and in the PDF
@@ -1044,7 +1052,11 @@ const ghUrl = (at) => `${S.study.data.repo}/blob/${at.commit || "main"}/${at.pat
 const ghLine = (fileLine) => { const [path, line] = fileLine.split(":"); return el("a", { href: ghUrl({ path, line }), target: "_blank", rel: "noopener" }, fileLine); };
 
 const peeked = {};
-async function peek(at, pre, code) {   // a file as it was at the commit that made the number: the function, or the lines around a constant, or the file
+// the number a fact prints, and how many decimals it shows: "0.224" -> {v: 0.224, dec: 3}; null for "$50 \\times 50$"
+const printed = (value) => { const m = /^\s*([+-]?\d+(?:\.(\d+))?)\s*$/.exec(texText(value).replace(/−/g, "-")); return m ? { v: Number(m[1]), dec: (m[2] || "").length } : null; };
+const roundsTo = (x, w) => [x, 100 * x, -x, -100 * x].some((y) => y.toFixed(w.dec) === w.v.toFixed(w.dec));
+
+async function peek(at, pre, code, want) {   // a file as it was at the commit that made the number: the function, or the lines around a constant, or the file
 	pre.dataset.loaded = "1";
 	pre.textContent = "Loading…";
 	const id = `${at.commit || "main"}:${at.path}`;
@@ -1063,14 +1075,21 @@ async function peek(at, pre, code) {   // a file as it was at the commit that ma
 			while (b < lines.length && b - a < 120 && (!lines[b].trim() || /^[\s)\]}]/.test(lines[b]))) b++;
 			while (b > a + 1 && !lines[b - 1].trim()) b--;
 		} else if (at.line) { a = Math.max(0, at.line - 4); b = Math.min(lines.length, at.line + 3); }
-		pre.replaceChildren(...Array.from({ length: b - a }, (_, k) => row(a + k)),
+		// a file the fact read: mark every line holding a number that rounds to the printed one (as is, or as a percentage)
+		const hits = want && !at.line ? lines.flatMap((l, i) => ((l.match(/-?\d+\.?\d*(?:e[+-]?\d+)?/gi) || []).some((x) => roundsTo(Number(x), want)) ? [i] : [])) : [];
+		if (hits.length) { a = Math.max(0, hits[0] - 3); b = Math.min(lines.length, a + 400); }
+		const marked = new Set(hits), note = !want || at.line ? null
+			: el("span", { class: "ln more" }, hits.length ? `${hits.length} line${hits.length === 1 ? "" : "s"} hold a number that rounds to ${want.v} (marked)` : `no number here rounds to ${want.v}: it is computed from this file's numbers`);
+		pre.replaceChildren(note || "", a ? el("span", { class: "ln more" }, `… ${a} lines above`) : "",
+			...Array.from({ length: b - a }, (_, k) => { const r = row(a + k); if (marked.has(a + k)) r.classList.add("mark"); return r; }),
 			!at.line && lines.length > b ? el("span", { class: "ln more" }, `… ${lines.length - b} more lines: open it on GitHub`) : "");
+		pre.querySelector(".ln.mark")?.scrollIntoView({ block: "nearest" });
 	} catch (e) { pre.textContent = "Could not read it: " + e.message; }
 }
 
-function fileRow(at, code) {
+function fileRow(at, code, want) {
 	const pre = el("pre", { class: "peek", hidden: !code || null });
-	const show = code ? null : el("button", { class: "btn mini", onclick: () => { pre.hidden = !pre.hidden; show.textContent = pre.hidden ? "show" : "hide"; if (!pre.hidden && !pre.dataset.loaded) peek(at, pre, false); } }, "show");
+	const show = code ? null : el("button", { class: "btn mini", onclick: () => { pre.hidden = !pre.hidden; show.textContent = pre.hidden ? "show" : "hide"; if (!pre.hidden && !pre.dataset.loaded) peek(at, pre, false, want); } }, "show");
 	if (code) peek(at, pre, true);
 	return [el("div", { class: "file" }, el("a", { href: ghUrl(at), target: "_blank", rel: "noopener" }, at.path + (at.line ? `:${at.line}` : "")),
 		el("span", { class: "muted" }, at.commit ? ` @ ${at.commit}` : " (uncommitted)"), show), pre];
@@ -1084,7 +1103,7 @@ function factCard(name) {
 		el("div", { class: "where" }, f.used.length ? ["used at ", ...f.used.flatMap((u, i) => [i ? ", " : "", ghLine(u)])] : "not used", R.doc && f.used.length && !placed ? " (not linked in the draft: is it older than this sheet?)" : ""),
 		on ? el("div", {}, el("div", { class: "lbl" }, "Computed by"), ...fileRow(f.code, true),
 			el("div", { class: "lbl" }, f.reads.length ? `Reads ${f.reads.length === 1 ? "one file" : f.reads.length + " files"}` : "Reads no file"),
-			...f.reads.flatMap((r) => fileRow(r, false))) : null);
+			...f.reads.flatMap((r) => fileRow(r, false, printed(f.value)))) : null);
 }
 
 function claimUseCard(u, i) {
@@ -1102,11 +1121,47 @@ function claimUseCard(u, i) {
 			r.problem ? el("div", { class: "problem" }, r.problem) : on && r.ok ? el("div", { class: "ok" }, r.ok) : null)));
 }
 
+// the facts in the order the draft first prints them; any it does not print last, by name
+const factOrder = () => {
+	const first = {};
+	R.links.forEach((L, i) => { if (L.kind === "fact" && !(L.ref in first)) first[L.ref] = i; });
+	return Object.keys(S.study.data.facts).sort((a, b) => (first[a] ?? 1e9) - (first[b] ?? 1e9) || a.localeCompare(b, undefined, { sensitivity: "base" }));
+};
+const factMatch = (name, q) => !q || fold(name).includes(fold(q)) || fold(texText(S.study.data.facts[name].value)).includes(fold(q));
+function filterFacts(q) { R.fq = q; $$("#panel .src.fact").forEach((c) => (c.hidden = !factMatch(c.dataset.ref, q))); }
+
+// a sentence of the manuscript, found in the draft by its longest run of plain words
+async function findSentence(s) {
+	const words = texText(s).replace(/[^A-Za-zÀ-ɏ' -]+/g, "|").split("|").map((x) => x.trim()).sort((a, b) => b.length - a.length)[0] || "";
+	const q = words.split(/\s+/).slice(0, 7).join(" ");
+	if (q.length < 8 || !R.find) return toast("Could not find that sentence in the draft");
+	const y = scrollY;
+	R.find.input.value = q;
+	R.find.input.closest(".findbox").hidden = false;
+	await runFind(q);
+	if (R.find.hits.length) backTo(y); else toast("Could not find that sentence in the draft");
+}
+
+async function markGiven(x) {   // a sentence that states given numbers, off the list: a line in the study's report/given-<paper>.txt
+	const d = S.study.data, line = x.sentence.split(/\s+/).join(" ");
+	try {
+		await S.study.src.update(d.given_file, (old) => (old ?? "# Sentences that state given numbers (a design input, a label, a threshold), not results.\n# step3_outputs/sources.py leaves them off the list of numbers with no source; editing one puts it back.\n") + line + "\n",
+			`Mark as given: ${x.file}:${x.line}`);
+		d.unsourced = d.unsourced.filter((y) => y !== x);
+		(d.given ??= []).push(x);
+		drawStudyPanel();
+		toast("Marked as given");
+	} catch (e) { toast(e.message, 5000); }
+}
+
 function drawStudyPanel() {
 	const d = S.study.data, checks = studyChecks();
 	const tab = (id, label) => el("button", { class: "ptab" + (R.tab === id ? " on" : ""), onclick: () => { R.tab = id; drawStudyPanel(); } }, label);
 	let body;
-	if (R.tab === "facts") body = Object.keys(d.facts).length ? Object.keys(d.facts).map(factCard) : el("p", { class: "empty" }, "No facts yet: a number from the study is \\fact{name}, computed in step3_outputs/facts.py.");
+	if (R.tab === "facts") body = Object.keys(d.facts).length
+		? [el("input", { type: "search", class: "pfind", placeholder: "Filter by name or value", "aria-label": "Filter facts", value: R.fq || "", oninput: (e) => filterFacts(e.target.value) }),
+			...factOrder().map((name) => { const c = factCard(name); c.hidden = !factMatch(name, R.fq); return c; })]
+		: el("p", { class: "empty" }, "No facts yet: a number from the study is \\fact{name}, computed in step3_outputs/facts.py.");
 	else if (R.tab === "claims") body = d.claims.length ? d.claims.map(claimUseCard) : el("p", { class: "empty" }, "No claims yet: a sentence that rests on a passage of a paper carries \\claim{Key/id}.");
 	else {
 		const item = (p) => el("li", { class: p.ref ? "go" : "", onclick: p.ref ? () => pick("claim", p.ref, true) : null }, p.text);
@@ -1116,8 +1171,13 @@ function drawStudyPanel() {
 				: el("p", { class: "muted" }, "Every fact is defined and used, and every claim names an annotation that is not disputed and agrees with its sentence."),
 			checks.unchecked ? el("p", { class: "muted" }, `${checks.unchecked} claimed passage${checks.unchecked === 1 ? " is" : "s are"} not yet marked verified: open each, read it, and mark it.`) : null,
 			el("h3", {}, `${d.unsourced.length} sentence${d.unsourced.length === 1 ? "" : "s"} with a number and no source`),
-			el("p", { class: "muted" }, "No \\fact, \\claim or \\cite in them. Some numbers are names (a design, an equation); the rest are typed and could go stale."),
-			el("ul", { class: "loose" }, ...d.unsourced.map((x) => el("li", {}, ghLine(`${x.file}:${x.line}`), " ", texText(x.sentence)))));
+			el("p", { class: "muted" }, "No \\fact, \\claim or \\cite in them. A typed result could go stale: make it a fact. A number that is given (a design input, a label, a threshold) can be marked so, and leaves this list.",
+				" Tap a sentence to find it in the draft."),
+			el("ul", { class: "loose" }, ...d.unsourced.map((x) => el("li", {}, ghLine(`${x.file}:${x.line}`), " ",
+				el("span", { class: "go", title: "Find it in the draft", onclick: () => findSentence(x.sentence) }, texText(x.sentence)),
+				S.study.canEdit && d.given_file ? [" ", el("button", { class: "btn mini", title: `Add it to ${d.given_file}`, onclick: () => markGiven(x) }, "given")] : null))),
+			d.given?.length ? el("details", {}, el("summary", {}, `${d.given.length} marked as given`),
+				el("ul", { class: "loose" }, ...d.given.map((x) => el("li", {}, ghLine(`${x.file}:${x.line}`), " ", texText(x.sentence))))) : null);
 	}
 	const grip = el("div", { class: "grip", onclick: () => $("#panel").classList.toggle("tall") });
 	$("#panel").replaceChildren(grip, el("div", { class: "ptabs" }, tab("facts", `Facts · ${Object.keys(d.facts).length}`), tab("claims", `Claims · ${d.claims.length}`),
@@ -1129,6 +1189,7 @@ function drawStudyPanel() {
 
 async function route() {
 	$("#pop").hidden = true;
+	$("#backto")?.remove();
 	if (S.boxing) setBoxing(false);
 	if (R?.study) R.y = scrollY;
 	const [, a, b, c] = location.hash.replace(/^#/, "").split("/");
