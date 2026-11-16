@@ -36,6 +36,7 @@ const PATHS = {
 	grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z", list: "M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01",
 	up: "M18 15l-6-6-6 6", down: "M6 9l6 6 6-6", close: "M6 6l12 12M18 6L6 18", copy: "M9 9h11v11H9zM5 15H4V4h11v1", out: "M14 4h6v6M20 4l-9 9M18 14v6H4V6h6",
 	book: "M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM8 7h8",
+	download: "M12 4v11M7 10l5 5 5-5M5 20h14",
 	moon: "M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z", sun: "M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4",
 	auto: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 3v18", pages: "M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M9 16h7",
 };
@@ -582,8 +583,17 @@ function readerBar() {
 		small() ? btn("search", "Find in paper", () => { findbox.hidden = !findbox.hidden; if (!findbox.hidden) find.focus(); }) : null,
 		btn("minus", "Zoom out", () => zoom(1 / 1.15), { cls: "hide-sm" }), btn("plus", "Zoom in", () => zoom(1.15), { cls: "hide-sm" }),
 		R.boxBtn = S.src.canEdit && !R.study ? btn("box", "Box a figure or table (B)", () => setBoxing(!S.boxing), { label: small() ? null : "Box" }) : null,
+		btn("download", "Download the PDF", () => downloadPdf()),
 		R.panelBtn = btn("panel", R.study ? "Facts, claims and checks" : "Claims and details", () => togglePanel(), { cls: R.panel ? "on" : "" }),
 	].filter(Boolean));
+}
+
+async function downloadPdf() {   // the PDF as shown: a study's draft, with its facts and claims marked, or the paper itself
+	if (!R?.doc) return;
+	const name = (R.study ? S.study?.paper || "draft" : R.key) + ".pdf";
+	const url = URL.createObjectURL(new Blob([await R.doc.getData()], { type: "application/pdf" }));
+	el("a", { href: url, download: name }).click();
+	setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 function togglePanel(on = !R.panel) {
