@@ -139,6 +139,7 @@ body.paneled #pages { margin-right: var(--panel); }
 .srclink { z-index: 4; }
 .srclink.k-fact { background: rgba(0, 150, 150, .20); }
 .srclink.k-claim { background: var(--hl); }
+.srclink.k-claim.anchor, .srclink.k-claim.anchor.sel { background: none; box-shadow: none; }
 .srchl { z-index: 3; background: var(--hl); }
 .srclink.k-claim.verified, .srchl.verified { background: var(--ok-soft); }
 .srclink.bad, .srchl.bad { background: var(--bad-soft); }

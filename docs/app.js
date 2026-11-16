@@ -967,7 +967,8 @@ function drawLinks() {
 		for (const [a, b, c, d] of L.lines || [])   // the sentence itself, highlighted
 			P.div.append(el("div", { class: `srchl${look}${linkOn(L) ? " sel" : ""}`, "data-kind": "claim", "data-ref": L.ref, title: `${L.ref}: the passage it rests on`,
 				style: `left:${a * 100}%;top:${b * 100}%;width:${(c - a) * 100}%;height:${(d - b) * 100}%`, onclick: () => pick("claim", L.ref, false) }));
-		P.div.append(el("a", { class: `srclink k-${L.kind}${look}${linkOn(L) ? " sel" : ""}`,
+		// a claim whose sentence was found is shown by its highlight alone; its link stays, invisible, as the anchor
+		P.div.append(el("a", { class: `srclink k-${L.kind}${look}${linkOn(L) ? " sel" : ""}${L.kind === "claim" && L.lines?.length ? " anchor" : ""}`,
 			"data-kind": L.kind, "data-ref": typeof L.ref === "string" ? L.ref : "",
 			title: L.kind === "fact" ? `${L.ref}: where it comes from` : L.kind === "claim" ? `${L.ref}: the passage it rests on` : L.kind === "link" ? L.ref : null,
 			href: L.kind === "link" ? L.ref : null, target: L.kind === "link" ? "_blank" : null, rel: L.kind === "link" ? "noopener" : null,
