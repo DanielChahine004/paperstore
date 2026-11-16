@@ -492,6 +492,8 @@ async function flush(key) {
 	}
 }
 addEventListener("beforeunload", (e) => { if (Object.values(pending).some((q) => q.saving || q.patches.size)) e.preventDefault(); });
+// live.js holds a reload of a new version while the reader is in the middle of something
+window.liveBusy = () => Object.values(pending).some((q) => q.saving || q.patches.size) || !!document.querySelector("dialog[open]") || S.boxing;
 async function removeNote(key, id) {
 	try { await saveNotes(key, (list) => list.filter((x) => x.id !== id), `${key}: delete claim ${id}`); refreshReader(); }
 	catch (e) { toast(e.message, 5000); }
