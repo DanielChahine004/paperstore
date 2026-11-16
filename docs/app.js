@@ -1153,6 +1153,23 @@ async function goDest(dest) {   // a \ref or a citation: the place in this PDF i
 	if (d[1]?.name === "XYZ" && d[3] != null) y = (await R.doc.getPage(n)).getViewport({ scale: R.scale }).convertToViewportPoint(0, d[3])[1];
 	backTo(scrollY);
 	scrollTo({ top: P.div.offsetTop + y - 80, behavior: "smooth" });
+	if (d[1]?.name === "XYZ" && d[3] != null) markDest(n, d[3], y);
+}
+
+async function markDest(n, top, y) {   // a brief highlight on the place a jump lands: a reference entry runs to the next anchor below it
+	R.dests ??= await R.doc.getDestinations();
+	let below = null;
+	for (const e of Object.values(R.dests)) {
+		if (e?.[1]?.name !== "XYZ" || e[3] == null || e[3] >= top - 1 || (below != null && e[3] <= below)) continue;
+		if ((await R.doc.getPageIndex(e[0])) + 1 === n) below = e[3];
+	}
+	const P = R.pages[n], h = below != null && top - below < 120 ? top - below : 14;
+	const v = (await R.doc.getPage(n)).getViewport({ scale: R.scale });
+	const b = v.convertToViewportPoint(0, top - h)[1];
+	P.div.querySelector(".destmark")?.remove();
+	const m = el("div", { class: "destmark", style: `top:${y - 2}px;height:${b - y + 4}px` });
+	P.div.append(m);
+	setTimeout(() => m.remove(), 2600);
 }
 
 function backTo(y) {   // after a jump (a citation, a reference, a sentence found): one tap returns to where the reader was
