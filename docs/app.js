@@ -600,6 +600,7 @@ async function relayout() {
 async function layout() {
 	const box = el("div", { id: "pages" });
 	$("#main").replaceChildren(box);
+	pinchZoom(box);
 	R.observer?.disconnect();
 	R.observer = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && renderPage(Number(e.target.dataset.n))), { rootMargin: "1200px 0px" });
 	R.pages = [];
@@ -844,6 +845,47 @@ function setBoxing(on) {
 	document.body.classList.toggle("boxing", on);
 	if (on) toast(small() ? "Drag over the figure" : "Drag a box over the figure or table · Esc to stop");
 }
+// two fingers on the pages zoom the paper, not the site: the pages scale with the fingers, and on
+// release they are drawn again, sharp, at the new size, with the point under the fingers kept in place
+function pinchZoom(box) {
+	let g = null;
+	const mid = (t) => [(t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2];
+	const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+	box.addEventListener("touchstart", (e) => {
+		if (e.touches.length !== 2 || S.boxing || !R?.pages.length) return;
+		const [x, y] = mid(e.touches), r = box.getBoundingClientRect();
+		// the page under the fingers, and where on it, as fractions of its size
+		let n = 1, best = Infinity;
+		for (let k = 1; k < R.pages.length; k++) {
+			const q = R.pages[k].div.getBoundingClientRect(), d = y < q.top ? q.top - y : y > q.bottom ? y - q.bottom : 0;
+			if (d < best) { best = d; n = k; }
+		}
+		const q = R.pages[n].div.getBoundingClientRect();
+		g = { d0: dist(e.touches), x, y, ratio: 1, n, fx: (x - q.left) / q.width, fy: (y - q.top) / q.height };
+		box.style.transformOrigin = `${x - r.left}px ${y - r.top}px`;
+	}, { passive: true });
+	box.addEventListener("touchmove", (e) => {
+		if (!g || e.touches.length !== 2) return;
+		e.preventDefault();
+		g.ratio = Math.min(4 / S.scale, Math.max(0.5 / S.scale, dist(e.touches) / g.d0));
+		box.style.transform = `scale(${g.ratio})`;
+	}, { passive: false });
+	const end = async () => {
+		if (!g) return;
+		const { x, y, ratio, n, fx, fy } = g;
+		g = null;
+		if (Math.abs(ratio - 1) < 0.03) { box.style.transform = ""; return; }
+		S.scale = Math.min(4, Math.max(0.5, S.scale * ratio));
+		store.set("ps.scale", S.scale);
+		await layout();
+		const P = R.pages[n], q = P.div.getBoundingClientRect(), now = $("#pages");
+		now.scrollLeft += q.left + fx * P.w - x;
+		scrollBy(0, q.top + fy * P.h - y);
+	};
+	box.addEventListener("touchend", end);
+	box.addEventListener("touchcancel", end);
+}
+
 async function zoom(f) {
 	if (!R) return;
 	S.scale = Math.min(4, Math.max(0.5, S.scale * f));

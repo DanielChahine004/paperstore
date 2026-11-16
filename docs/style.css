@@ -121,7 +121,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .claim .edit .row { display: flex; gap: 6px; justify-content: flex-end; }
 
 /* reader */
-#pages { overflow-x: hidden; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 20px 12px 80px; }
+#pages { overflow-x: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 20px 12px 80px; touch-action: pan-x pan-y; }
+#pages > .page { margin-inline: auto; flex: none; }   /* centred while it fits; wider than the screen, it scrolls from its left edge */
 body.paneled #pages { margin-right: var(--panel); }
 .page { position: relative; background: var(--page-bg); box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 6px 24px rgba(0,0,0,.06); border-radius: 2px; }
 .page canvas { position: absolute; inset: 0; width: 100%; height: 100%; filter: var(--page-filter); }
