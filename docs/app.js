@@ -1201,7 +1201,12 @@ function drawStudyPanel() {
 				el("span", { class: "go", title: "Find it in the draft", onclick: () => findSentence(x.sentence) }, texText(x.sentence)),
 				S.study.canEdit && d.given_file ? [" ", el("button", { class: "btn mini", title: `Add it to ${d.given_file}`, onclick: () => markGiven(x) }, "given")] : null))),
 			d.given?.length ? el("details", {}, el("summary", {}, `${d.given.length} marked as given`),
-				el("ul", { class: "loose" }, ...d.given.map((x) => el("li", {}, ghLine(`${x.file}:${x.line}`), " ", texText(x.sentence))))) : null);
+				el("ul", { class: "loose" }, ...d.given.map((x) => el("li", {}, ghLine(`${x.file}:${x.line}`), " ", texText(x.sentence))))) : null,
+			// a citation with no \claim: the reader cannot follow it to the passage it rests on (books and unpublished work excepted)
+			d.unclaimed ? [el("h3", {}, `${d.unclaimed.reduce((n, x) => n + x.keys.length, 0)} citation${d.unclaimed.reduce((n, x) => n + x.keys.length, 0) === 1 ? "" : "s"} with no claim`),
+				el("p", { class: "muted" }, "A citation that names no passage. A \\claim{Key/id} in its place points at the passage of the paper it rests on. Tap a sentence to find it in the draft."),
+				el("ul", { class: "loose" }, ...d.unclaimed.map((x) => el("li", {}, ghLine(`${x.file}:${x.line}`), " ", el("b", {}, x.keys.join(", ")), " ",
+					el("span", { class: "go", title: "Find it in the draft", onclick: () => findSentence(x.sentence) }, texText(x.sentence)))))] : null);
 	}
 	const grip = el("div", { class: "grip", onclick: () => $("#panel").classList.toggle("tall") });
 	$("#panel").replaceChildren(grip, el("div", { class: "ptabs" }, tab("facts", `Facts · ${Object.keys(d.facts).length}`), tab("claims", `Claims · ${d.claims.length}`),
