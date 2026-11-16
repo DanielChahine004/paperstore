@@ -56,10 +56,19 @@ def identity_problem(path, entry, cache_dir):
     if entry.doi and norm(entry.doi) in norm(head):
         return None
     from .bib import plain
-    title = plain(entry.fields.get("title", ""))[:40]
-    if title and title in plain(head):
+    title, text = plain(entry.fields.get("title", ""))[:40], plain(head)
+    if title and title in text:
+        return None
+    if title and len(title) >= 20 and _near(title, text):   # a scan's OCR misreads a letter or two
         return None
     return f"{path.name}: neither the DOI nor the title of {entry.key} is on its first two pages"
+
+
+def _near(title, text, ratio=0.9):
+    """Whether text holds the title with at most a tenth of its letters misread."""
+    from difflib import SequenceMatcher
+    n = len(title)
+    return any(SequenceMatcher(None, title, text[i:i + n]).ratio() >= ratio for i in range(max(1, len(text) - n + 1)))
 
 
 # ---- anchoring -------------------------------------------------------------------------------

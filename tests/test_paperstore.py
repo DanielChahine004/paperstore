@@ -115,3 +115,9 @@ def test_an_ambiguous_quote_is_refused(store):
     with pytest.raises(SystemExit) as ex:
         main(["--store", str(store), "annotate", "AbiAkl2023", "bore diameter of 70 cm"])
     assert "2 matches" in str(ex.value.code)
+
+
+def test_a_title_misread_by_ocr_still_names_its_paper():
+    from paperstore.pdf import _near
+    assert _near("onthemathematicalfoundationsoftheoreticalstatistics"[:40], "ixonthemathematicalfoimdationsoftheoreticalstatisticsbyrafisher")
+    assert not _near("onthemathematicalfoundationsoftheoreticalstatistics"[:40], "advancesintimeofflightpetsurtikarp")
